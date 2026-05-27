@@ -12,6 +12,8 @@ data class TorrentInfo(
     @SerializedName("download_rate_str") val downloadRateStr: String = "",
     @SerializedName("upload_rate_str") val uploadRateStr: String = "",
     @SerializedName("num_peers") val numPeers: Int = 0,
+    @SerializedName("total_download") val totalDownload: Long = 0,
+    @SerializedName("total_upload") val totalUpload: Long = 0,
     @SerializedName("num_seeds") val numSeeds: Int = 0,
     @SerializedName("num_files") val numFiles: Int = 0,
     val files: List<FileInfo> = emptyList()
