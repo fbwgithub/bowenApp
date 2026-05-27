@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.bowenapp.data.ServerConfig
 import com.bowenapp.data.api.TorrentApi
 import com.bowenapp.data.api.SelectedDownloadRequest
+import com.bowenapp.data.api.PlayMagnetRequest
 import com.bowenapp.data.model.*
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
