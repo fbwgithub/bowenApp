@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html><body>
+<h2>磁力解析测试</h2>
+<input id="magnet" style="width:100%;padding:8px" placeholder="magnet:?xt=urn:btih:...">
+<button onclick="test()" style="padding:8px 16px;margin-top:8px">解析</button>
+<pre id="result" style="margin-top:16px;background:#eee;padding:8px;min-height:100px"></pre>
+<script>
+async function test() {
+    const m = document.getElementById('magnet').value.trim();
+    document.getElementById('result').textContent = '解析中...';
+    try {
+        const r = await fetch('/api/magnet/parse', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({magnet: m})
+        });
+        const t = await r.text();
+        document.getElementById('result').textContent = t;
+    } catch(e) {
+        document.getElementById('result').textContent = '错误: ' + e.message;
+    }
+}
+</script>
+</body></html>

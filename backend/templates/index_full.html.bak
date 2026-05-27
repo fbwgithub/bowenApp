@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>磁力下载工具</title>
+    <style>
+        * { margin:0; padding:0; box-sizing:border-box; }
+        :root {
+            --bg: #0f0f1a; --card: #1a1a2e; --surface: #16213e;
+            --text: #e0e0f0; --text2: #8899b4; --accent: #4fc3f7;
+            --success: #66bb6a; --warn: #ffa726; --danger: #ef5350;
+            --border: #2a2a4a;
+        }
+        body { font-family: -apple-system,sans-serif; background:var(--bg); color:var(--text); }
+        .app { max-width:800px; margin:0 auto; padding:16px; }
+        .header { display:flex; align-items:center; justify-content:space-between; padding:16px 0; }
+        .header h1 { font-size:20px; background:linear-gradient(135deg,var(--accent),#7c4dff); -webkit-background-clip:text; -webkit-text-fill-color:transparent; }
+        .stats { display:flex; gap:16px; font-size:13px; color:var(--text2); flex-wrap:wrap; }
+        .btn { padding:10px 20px; border:none; border-radius:10px; cursor:pointer; font-size:14px; font-weight:500; }
+        .btn-primary { background:var(--accent); color:#fff; }
+        .btn-primary:disabled { opacity:.5; cursor:not-allowed; }
+        .btn-sm { padding:6px 12px; font-size:12px; }
+        .btn-danger { background:var(--danger); color:#fff; }
+        .btn-outline { background:transparent; border:1px solid var(--border); color:var(--text); }
+        .card { background:var(--card); border:1px solid var(--border); border-radius:12px; padding:16px; margin-bottom:12px; }
+        .card:hover { border-color:var(--accent); }
+        .card-header { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:8px; }
+        .card-name { font-weight:600; word-break:break-all; flex:1; font-size:14px; }
+        .badge { font-size:11px; padding:2px 10px; border-radius:20px; white-space:nowrap; margin-left:8px; }
+        .badge-dl { background:rgba(79,195,247,.15); color:var(--accent); }
+        .badge-done { background:rgba(102,187,106,.15); color:var(--success); }
+        .badge-pause { background:rgba(255,167,38,.15); color:var(--warn); }
+        .badge-meta { background:rgba(66,165,245,.15); color:#42a5f5; }
+        .progress-bar { height:6px; background:var(--bg); border-radius:3px; overflow:hidden; margin:8px 0; }
+        .progress-fill { height:100%; background:linear-gradient(90deg,var(--accent),#7c4dff); border-radius:3px; transition:width .3s; }
+        .meta { display:flex; gap:16px; flex-wrap:wrap; font-size:12px; color:var(--text2); }
+        .meta span { color:var(--text); font-weight:500; }
+        .view { display:none; }
+        .view.active { display:block; }
+        textarea, input[type=text] { width:100%; padding:12px; background:var(--surface); border:1px solid var(--border); border-radius:10px; color:var(--text); font-size:14px; font-family:inherit; }
+        textarea:focus, input[type=text]:focus { outline:none; border-color:var(--accent); }
+        textarea { resize:vertical; min-height:80px; }
+        .form-group { margin-bottom:16px; }
+        .form-group label { display:block; font-size:13px; color:var(--text2); margin-bottom:6px; }
+        .file-item { display:flex; align-items:center; padding:8px 12px; background:var(--surface); border-radius:8px; margin-bottom:4px; cursor:pointer; }
+        .file-item.selected { background:rgba(79,195,247,.1); border:1px solid var(--accent); }
+        .file-icon { font-size:20px; margin-right:12px; }
+        .file-info { flex:1; min-width:0; }
+        .file-name { font-size:13px; word-break:break-all; }
+        .file-size { font-size:11px; color:var(--text2); }
+        .file-checkbox { width:20px; height:20px; margin-left:8px; accent-color:var(--accent); }
+        .empty { text-align:center; padding:60px 20px; color:var(--text2); }
+        .empty h3 { color:var(--text); margin-bottom:8px; }
+        .empty-icon { font-size:48px; margin-bottom:16px; opacity:.5; }
+        .tabs { display:flex; gap:8px; margin-bottom:16px; }
+        .tab { padding:8px 16px; border-radius:8px; cursor:pointer; font-size:14px; background:var(--surface); color:var(--text2); border:none; }
+        .tab.active { background:var(--accent); color:#fff; }
+        .tab-content { display:none; }
+        .tab-content.active { display:block; }
+        .toast { position:fixed; top:16px; right:16px; padding:12px 20px; background:var(--card); border:1px solid var(--border); border-radius:10px; z-index:999; animation:slideIn .3s; }
+        @keyframes slideIn { from{transform:translateX(100%);opacity:0} to{transform:translateX(0);opacity:1} }
+        .file-progress { width:60px; height:3px; background:var(--bg); border-radius:2px; overflow:hidden; margin:0 8px; }
+        .file-progress-fill { height:100%; background:var(--accent); border-radius:2px; }
+        .detail-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin:12px 0; }
+        .detail-item .label { font-size:11px; color:var(--text2); text-transform:uppercase; }
+        .detail-item .value { font-size:14px; font-weight:500; }
+        input[type=file] { width:100%; padding:20px; background:var(--surface); border:2px dashed var(--border); border-radius:10px; color:var(--text2); text-align:center; cursor:pointer; }
+        @media(max-width:600px) { .meta { gap:8px; } .stats { gap:8px; font-size:12px; } }
+    </style>
+</head>
+<body>
+<div class="app" id="app">
+    <div class="header">
+        <div>
+            <h1>⚡ 磁力下载</h1>
+            <div class="stats" id="stats">
+                <span>任务: <span id="s-total">0</span></span>
+                <span>活跃: <span id="s-active">0</span></span>
+                <span>↓ <span id="s-dl">0</span></span>
+                <span>↑ <span id="s-ul">0</span></span>
+            </div>
+        </div>
+        <button class="btn btn-primary" onclick="showView('add')">+ 添加</button>
+    </div>
+
+    <div class="view active" id="v-list"></div>
+
+    <div class="view" id="v-add">
+        <div class="tabs">
+            <button class="tab active" onclick="switchTab(this,'tab-magnet')">磁力链接</button>
+            <button class="tab" onclick="switchTab(this,'tab-torrent')">种子文件</button>
+            <button class="tab" onclick="switchTab(this,'tab-url')">种子URL</button>
+        </div>
+
+        <!-- Magnet Tab -->
+        <div class="tab-content active" id="tab-magnet">
+            <button class="btn btn-sm btn-outline" onclick="showView('list')" style="margin-bottom:12px">← 返回列表</button>
+            <div class="form-group">
+                <label>磁力链接</label>
+                <textarea id="magnet-input" placeholder="magnet:?xt=urn:btih:..."></textarea>
+            </div>
+            <button class="btn btn-primary" onclick="parseMagnet()" id="parseBtn" style="width:100%">解析磁力链接</button>
+        </div>
+
+        <!-- Torrent file Tab -->
+        <div class="tab-content" id="tab-torrent">
+            <button class="btn btn-sm btn-outline" onclick="showView('list')" style="margin-bottom:12px">← 返回列表</button>
+            <div class="form-group">
+                <label>选择 .torrent 种子文件</label>
+                <input type="file" id="torrent-file" accept=".torrent" onchange="uploadTorrent(this)">
+            </div>
+            <div id="upload-status" style="margin-top:12px"></div>
+        </div>
+
+        <!-- URL Tab -->
+        <div class="tab-content" id="tab-url">
+            <button class="btn btn-sm btn-outline" onclick="showView('list')" style="margin-bottom:12px">← 返回列表</button>
+            <div class="form-group">
+                <label>种子文件 URL</label>
+                <input type="text" id="url-input" placeholder="https://example.com/file.torrent">
+            </div>
+            <button class="btn btn-primary" onclick="addTorrentUrl()" style="width:100%">下载种子</button>
+            <div id="url-status" style="margin-top:12px"></div>
+        </div>
+
+        <!-- Parse result -->
+        <div id="parse-result" style="margin-top:16px"></div>
+        <div id="file-list" style="margin-top:12px"></div>
+        <div id="download-area" style="margin-top:12px;display:none">
+            <button class="btn btn-primary" onclick="downloadSelected()" id="dlBtn" style="width:100%">下载选中文件</button>
+        </div>
+    </div>
+
+    <div class="view" id="v-detail">
+        <button class="btn btn-sm btn-outline" onclick="showView('list')" style="margin-bottom:12px">← 返回列表</button>
+        <div id="detail-content"></div>
+    </div>
+</div>
+
+<script>
+const API = '';
+let torrents = {};
+let parsedData = null;
+let selectedFiles = new Set();
+
+function $(id) { return document.getElementById(id); }
+
+function showView(name) {
+    document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+    $('v-' + name).classList.add('active');
+    if (name === 'add') { resetAddForm(); }
+    if (name === 'list') loadTorrents();
+}
+
+function switchTab(el, id) {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+    el.classList.add('active');
+    $(id).classList.add('active');
+}
+
+function resetAddForm() {
+    $('parse-result').innerHTML = '';
+    $('file-list').innerHTML = '';
+    $('download-area').style.display = 'none';
+    $('upload-status').innerHTML = '';
+    $('url-status').innerHTML = '';
+    parsedData = null;
+    selectedFiles = new Set();
+}
+
+async function api(url, opt={}) {
+    try {
+        const resp = await fetch(API + url, { headers:{'Content-Type':'application/json'}, ...opt });
+        const text = await resp.text();
+        try { return JSON.parse(text); } catch(e) { return null; }
+    } catch(e) {
+        showToast('网络错误: '+e.message, 'error');
+        return null;
+    }
+}
+
+async function loadTorrents() {
+    const data = await api('/api/torrents');
+    if (!data) return;
+    torrents = {};
+    data.forEach(t => torrents[t.info_hash] = t);
+    renderList();
+    const s = await api('/api/stats');
+    if (s) {
+        $('s-total').textContent = s.total_torrents;
+        $('s-active').textContent = s.active_downloads;
+        $('s-dl').textContent = s.total_download_rate;
+        $('s-ul').textContent = s.total_upload_rate;
+    }
+}
+
+function renderList() {
+    const arr = Object.values(torrents);
+    if (arr.length === 0) {
+        $('v-list').innerHTML = `<div class="empty"><div class="empty-icon">📥</div><h3>暂无下载任务</h3><p>点击 + 添加 开始下载</p></div>`;
+        return;
+    }
+    $('v-list').innerHTML = arr.map(t => {
+        const cls = t.state==='downloading'?'badge-dl':t.state==='finished'||t.state==='seeding'?'badge-done':t.state==='paused'?'badge-pause':'badge-meta';
+        const txt = {downloading:'下载中',downloading_metadata:'获取元数据',finished:'已完成',seeding:'做种中',paused:'已暂停',checking:'检查中'}[t.state]||t.state;
+        const pct = (t.progress*100).toFixed(1);
+        return `<div class="card" onclick="showDetail('${t.info_hash}')">
+            <div class="card-header"><div class="card-name">${esc(t.name)}</div><span class="badge ${cls}">${txt}</span></div>
+            <div class="progress-bar"><div class="progress-fill" style="width:${pct}%"></div></div>
+            <div class="meta">进度<span>${pct}%</span> 大小<span>${t.total_size_str}</span> ↓<span>${t.download_rate_str}</span> ↑<span>${t.upload_rate_str}</span> Peers<span>${t.num_peers}</span></div>
+        </div>`;
+    }).join('');
+}
+
+async function parseMagnet() {
+    pollingPaused = true;
+    const magnet = $('magnet-input').value.trim();
+    if (!magnet.startsWith('magnet:')) { showToast('请输入有效磁力链接','error'); return; }
+    $('parseBtn').disabled = true; $('parseBtn').textContent = '解析中...';
+    $('parse-result').innerHTML = ''; $('file-list').innerHTML = ''; $('download-area').style.display = 'none';
+    selectedFiles = new Set();
+    const r = await api('/api/magnet/parse', { method:'POST', body:JSON.stringify({magnet}) });
+    $('parseBtn').disabled = false; $('parseBtn').textContent = '解析磁力链接';
+    if (!r || !r.success) {
+                $('parse-result').innerHTML = `<div style="color:var(--danger);padding:12px">解析失败: ${r?.error||'未知错误'}</div>`;
+        pollingPaused = false;
+        return;
+    }
+    parsedData = { magnet, name: r.name, totalSize: r.total_size_str, files: r.files, infoHash: r.info_hash };
+        pollingPaused = false;
+    $('parse-result').innerHTML = `<div class="card" style="border-color:var(--accent)"><b>📁 ${esc(r.name)}</b><div style="font-size:13px;color:var(--text2);margin-top:4px">大小: ${r.total_size_str} | 文件: ${r.files.length}</div></div>`;
+    r.files.forEach(f => selectedFiles.add(f.index));
+    renderFileList(r.files);
+    $('download-area').style.display = 'block';
+    updateDownloadBtn();
+}
+
+function renderFileList(files) {
+    const container = $('file-list');
+    container.innerHTML = `<div style="display:flex;justify-content:space-between;margin-bottom:8px">
+        <span style="font-size:14px;font-weight:500">选择文件</span>
+        <div><button class="btn btn-sm btn-outline" style="padding:4px 10px" onclick="toggleAll(true)">全选</button>
+        <button class="btn btn-sm btn-outline" style="padding:4px 10px" onclick="toggleAll(false)">取消</button></div>
+    </div>`;
+    files.forEach(f => {
+        const ext = (f.path.split('.').pop()||'').toLowerCase();
+        const icon = {mp4:'🎬',mkv:'🎬',avi:'🎬',mov:'🎬',mp3:'🎵',aac:'🎵',jpg:'🖼️',png:'🖼️',zip:'📦',rar:'📦',pdf:'📄',txt:'📄'}[ext]||'📁';
+        const div = document.createElement('div');
+        div.className = 'file-item';
+        div.dataset.index = f.index;
+        div.onclick = () => toggleFile(f.index);
+        const isVideo = ['mp4','mkv','avi','mov','wmv','flv','webm','m4v'].includes(ext);
+        div.innerHTML = `<span class="file-icon">${icon}</span>
+            <div class="file-info"><div class="file-name">${esc(f.path.split('/').pop()||f.path)}</div><div class="file-size">${f.size_str}</div></div>
+            <div style="display:flex;align-items:center;gap:4px">
+            ${isVideo ? `<button class="btn btn-sm btn-primary" style="padding:4px 8px;font-size:11px" onclick="event.stopPropagation();playParsedFile(${f.index},'${esc(f.path)}')">▶</button>` : ''}
+            <input type="checkbox" class="file-checkbox" checked onclick="event.stopPropagation()" onchange="toggleFile(${f.index})">
+            </div>`;
+        container.appendChild(div);
+    });
+}
+
+function toggleFile(idx) {
+    if (selectedFiles.has(idx)) selectedFiles.delete(idx); else selectedFiles.add(idx);
+    document.querySelectorAll('.file-item').forEach(el => {
+        if (parseInt(el.dataset.index) === idx) {
+            el.classList.toggle('selected', selectedFiles.has(idx));
+            el.querySelector('.file-checkbox').checked = selectedFiles.has(idx);
+        }
+    });
+    updateDownloadBtn();
+}
+function toggleAll(s) {
+    if (!parsedData) return;
+    s ? parsedData.files.forEach(f => selectedFiles.add(f.index)) : selectedFiles.clear();
+    document.querySelectorAll('.file-item').forEach(el => {
+        const i = parseInt(el.dataset.index);
+        el.classList.toggle('selected', selectedFiles.has(i));
+        el.querySelector('.file-checkbox').checked = selectedFiles.has(i);
+    });
+    updateDownloadBtn();
+}
+function updateDownloadBtn() {
+    const c = selectedFiles.size;
+    $('dlBtn').textContent = `下载选中文件 (${c}/${parsedData?.files?.length||0})`;
+    $('dlBtn').disabled = c === 0;
+}
+
+async function downloadSelected() {
+    if (!parsedData || selectedFiles.size === 0) return;
+    const r = await api('/api/magnet/download', { method:'POST', body:JSON.stringify({ magnet:parsedData.magnet, selectedFiles:Array.from(selectedFiles) }) });
+    if (r?.success) { showToast('下载任务已添加'); showView('list'); }
+    else showToast('下载失败: '+(r?.error||'未知'), 'error');
+}
+
+// Upload torrent file
+async function uploadTorrent(input) {
+    const file = input.files[0];
+    if (!file) return;
+    $('upload-status').innerHTML = '<div style="color:var(--text2)">上传中...</div>';
+    const formData = new FormData();
+    formData.append('file', file);
+    try {
+        const r = await fetch('/api/torrent/upload', { method:'POST', body:formData });
+        const j = await r.json();
+        if (j.success) { showToast('种子已添加'); showView('list'); }
+        else showToast('上传失败: '+j.error, 'error');
+    } catch(e) { showToast('上传失败: '+e.message, 'error'); }
+}
+
+// Add torrent from URL
+async function addTorrentUrl() {
+    const url = $('url-input').value.trim();
+    if (!url) { showToast('请输入种子文件URL','error'); return; }
+    $('url-status').innerHTML = '<div style="color:var(--text2)">下载中...</div>';
+    const r = await api('/api/torrent/url', { method:'POST', body:JSON.stringify({url}) });
+    if (r?.success) { showToast('种子已添加'); showView('list'); }
+    else showToast('添加失败: '+(r?.error||'未知'), 'error');
+}
+
+// Detail
+async function showDetail(infoHash) {
+    const t = await api('/api/torrents/'+infoHash);
+    if (!t) { showToast('获取详情失败','error'); return; }
+    showView('detail');
+    let html = `<div class="card">
+        <div class="meta" style="margin-bottom:8px">状态: ${t.state} | 进度: ${(t.progress*100).toFixed(1)}% | 大小: ${t.total_size_str}</div>
+        <div class="progress-bar"><div class="progress-fill" style="width:${(t.progress*100).toFixed(1)}%"></div></div>
+        <div class="detail-grid">
+            <div class="detail-item"><div class="label">下载速度</div><div class="value">${t.download_rate_str}</div></div>
+            <div class="detail-item"><div class="label">上传速度</div><div class="value">${t.upload_rate_str}</div></div>
+            <div class="detail-item"><div class="label">已下载</div><div class="value">${formatBytes(t.total_download)}</div></div>
+            <div class="detail-item"><div class="label">Peers</div><div class="value">${t.num_peers}</div></div>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:12px">
+            ${t.state==='paused'?`<button class="btn btn-sm btn-primary" onclick="resume('${infoHash}')">▶ 继续</button>`
+            :`<button class="btn btn-sm btn-outline" onclick="pause('${infoHash}')">⏸ 暂停</button>`}
+            <button class="btn btn-sm btn-danger" onclick="remove('${infoHash}')">🗑 删除</button>
+        </div>
+    </div>`;
+    html += `<h3 style="margin:16px 0 8px;font-size:15px">文件列表 (${t.files.length})</h3>`;
+    t.files.forEach(f => {
+        const ext = (f.path.split('.').pop()||'').toLowerCase();
+        const isVideo = ['mp4','mkv','avi','mov','wmv','flv','webm','m4v'].includes(ext);
+        const icon = {mp4:'🎬',mkv:'🎬',avi:'🎬',mov:'🎬',mp3:'🎵',aac:'🎵',jpg:'🖼️',png:'🖼️',zip:'📦',rar:'📦',pdf:'📄',txt:'📄'}[ext]||'📁';
+        html += `<div class="file-item" style="cursor:default">
+            <span class="file-icon">${icon}</span>
+            <div class="file-info"><div class="file-name">${esc(f.path.split('/').pop()||f.path)}</div><div class="file-size">${f.size_str}</div></div>
+            <div class="file-progress"><div class="file-progress-fill" style="width:${f.progress.toFixed(0)}%"></div></div>
+            <span style="font-size:11px;color:var(--text2);margin:0 8px;white-space:nowrap">${f.progress.toFixed(0)}%</span>
+            ${isVideo?`<button class="btn btn-sm btn-primary" onclick="playFile('${infoHash}',${f.index},'${esc(f.path)}')">▶</button>`:''}
+            <button class="btn btn-sm btn-outline" onclick="downloadFile('${infoHash}',${f.index})">💾</button>
+        </div>`;
+    });
+    $('detail-content').innerHTML = html;
+}
+
+async function pause(h) { await api('/api/torrents/'+h+'/pause',{method:'POST'}); showDetail(h); }
+async function resume(h) { await api('/api/torrents/'+h+'/resume',{method:'POST'}); showDetail(h); }
+async function remove(h) { showDeleteDialog(h, document.querySelector('#detail-content .card-name')?.textContent || ''); }
+
+function playFile(h,i,name) {
+    const url = '/api/stream/'+h+'/'+i;
+    const el = document.createElement('div');
+    el.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:#000;z-index:1000;display:flex;flex-direction:column';
+    el.innerHTML = `<div style="padding:12px;display:flex;align-items:center;gap:8px;background:var(--bg)">
+        <button onclick="document.body.removeChild(this.parentElement.parentElement)" style="background:none;border:none;color:#fff;font-size:16px;cursor:pointer">← 返回</button>
+        <span style="color:#fff;font-size:14px">${esc(name.split('/').pop())}</span></div>
+        <video controls autoplay style="flex:1;width:100%;max-height:100%" src="${url}"></video>`;
+    document.body.appendChild(el);
+}
+function downloadFile(h,i) { window.open('/api/download/'+h+'/'+i,'_blank'); }
+
+function esc(s) { const d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
+function formatBytes(b) { if(!b) return '0 B'; const u=['B','KB','MB','GB','TB']; let i=0,s=b; while(s>=1024&&i<u.length-1){s/=1024;i++} return s.toFixed(2)+' '+u[i]; }
+function showToast(msg,type) {
+    const t=document.createElement('div'); t.className='toast'; t.textContent=msg;
+    t.style.borderLeft=`3px solid ${type==='error'?'var(--danger)':'var(--success)'}`;
+    document.body.appendChild(t);
+    setTimeout(()=>{t.style.opacity='0';t.style.transition='all .3s';setTimeout(()=>t.remove(),300)},3000);
+}
+let pollingPaused = false;
+let pollingBusy = false;
+setInterval(function(){ if(!pollingPaused && !pollingBusy) { pollingBusy = true; loadTorrents().finally(function(){ pollingBusy = false; }); } }, 5000);
+loadTorrents();
+
+async function playParsedFile(index, filename) {
+    if (!parsedData) return;
+    showToast('正在添加下载并启动播放...', 'info');
+    const r = await api('/api/magnet/play', { method:'POST', body:JSON.stringify({ magnet:parsedData.magnet, file_index:index }) });
+    if (r?.success) {
+        const el = document.createElement('div');
+        el.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:#000;z-index:1000;display:flex;flex-direction:column';
+        el.innerHTML = `<div style="padding:12px;display:flex;align-items:center;gap:8px;background:var(--bg)">
+            <button onclick="document.body.removeChild(this.parentElement.parentElement)" style="background:none;border:none;color:#fff;font-size:16px;cursor:pointer">← 返回</button>
+            <span style="color:#fff;font-size:14px">${esc(filename.split('/').pop())}</span></div>
+            <video controls autoplay style="flex:1;width:100%;max-height:100%" src="${r.stream_url}"></video>`;
+        document.body.appendChild(el);
+    } else {
+        showToast('播放失败: '+(r?.error||'未知'), 'error');
+    }
+}
+
+
+let deleteTarget = '';
+
+function showDeleteDialog(infoHash, name) {
+    deleteTarget = infoHash;
+    document.getElementById('delete-name').textContent = '「' + name + '」';
+    document.getElementById('delete-dialog').style.display = 'flex';
+}
+
+function closeDeleteDialog() {
+    document.getElementById('delete-dialog').style.display = 'none';
+    deleteTarget = '';
+}
+
+function confirmDelete() {
+    const opt = document.querySelector('input[name="delete-opt"]:checked');
+    const delFiles = opt ? opt.value === 'all' : false;
+    closeDeleteDialog();
+    api('/api/torrents/' + deleteTarget + '?delete_files=' + delFiles, { method:'DELETE' });
+    showToast('任务已删除' + (delFiles ? '（含文件）' : ''));
+    deleteTarget = '';
+    setTimeout(loadTorrents, 500);
+}
+
+</script>
+
+<!-- Delete Dialog -->
+<div id="delete-dialog" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);z-index:1001;align-items:center;justify-content:center">
+    <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:24px;max-width:360px;width:90%">
+        <h3 style="margin-bottom:12px">删除任务</h3>
+        <p style="font-size:14px;color:var(--text2);margin-bottom:16px" id="delete-name"></p>
+        <div style="margin-bottom:16px">
+            <label style="display:flex;align-items:center;gap:8px;padding:8px 0;cursor:pointer">
+                <input type="radio" name="delete-opt" value="task" checked>
+                <span>只删除任务（保留已下载的文件）</span>
+            </label>
+            <label style="display:flex;align-items:center;gap:8px;padding:8px 0;cursor:pointer">
+                <input type="radio" name="delete-opt" value="all">
+                <span>同时删除已下载的文件</span>
+            </label>
+        </div>
+        <div style="display:flex;gap:8px;justify-content:flex-end">
+            <button class="btn btn-sm btn-outline" onclick="closeDeleteDialog()" style="padding:8px 16px">取消</button>
+            <button class="btn btn-sm btn-danger" onclick="confirmDelete()" style="padding:8px 16px">确认删除</button>
+        </div>
+    </div>
+</div>
+
+</body>
+</html>

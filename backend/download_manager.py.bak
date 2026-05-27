@@ -1,0 +1,315 @@
+import libtorrent as lt
+import os
+import time
+import threading
+import logging
+import requests
+import tempfile
+import socket as _sock
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+TORRENT_CACHE_URLS = [
+    "https://itorrents.org/torrent/{hash}.torrent",
+    "https://itorrents.org/torrent/{hash_lower}.torrent",
+    "https://torrage.com/torrent/{hash}.torrent",
+    "https://torrage.com/torrent/{hash_lower}.torrent",
+    "https://btcache.me/torrent/{hash}.torrent",
+    "https://btcache.me/torrent/{hash_lower}.torrent",
+    "https://magnetdl.com/download/torrent/{hash_lower}.torrent",
+]
+
+class DownloadManager:
+    def __init__(self, download_dir="/root/bowenApp/downloads"):
+        self.download_dir = download_dir
+        os.makedirs(download_dir, exist_ok=True)
+        self.session = lt.session()
+        settings = {
+            'user_agent': 'MagnetDownloader/2.0.0',
+            'listen_interfaces': '0.0.0.0:6881',
+            'alert_mask': lt.alert.category_t.error_notification | lt.alert.category_t.status_notification,
+            'enable_dht': True, 'enable_lsd': True, 'enable_upnp': True, 'enable_natpmp': True,
+            'dht_announce_interval': 60, 'connection_speed': 20,
+        }
+        self.session.apply_settings(settings)
+        self.session.add_dht_router("router.bittorrent.com", 6881)
+        self.session.add_dht_router("router.utorrent.com", 6881)
+        self.session.add_dht_router("dht.transmissionbt.com", 6881)
+        self.torrents = {}
+        self.lock = threading.Lock()
+        self.alert_thread_running = True
+        self.alert_thread = threading.Thread(target=self._alert_loop, daemon=True)
+        self.alert_thread.start()
+        self._warmup_dns()
+        logger.info("Download manager initialized")
+
+    def _warmup_dns(self):
+        """Pre-resolve DNS to avoid resolution failures in threads"""
+        for url in TORRENT_CACHE_URLS:
+            domain = url.split("://")[1].split("/")[0]
+            for attempt in range(3):
+                try:
+                    _sock.gethostbyname(domain)
+                    break
+                except Exception:
+                    time.sleep(0.3)
+
+    def _alert_loop(self):
+        while self.alert_thread_running:
+            try:
+                alerts = self.session.pop_alerts()
+                for alert in alerts:
+                    if isinstance(alert, lt.torrent_finished_alert):
+                        logger.info(f"Finished: {alert.torrent_name}")
+                    elif isinstance(alert, lt.torrent_error_alert):
+                        logger.error(f"Torrent error: {alert.error}")
+            except:
+                pass
+            time.sleep(0.1)
+
+    def extract_info_hash(self, magnet_uri):
+        import re
+        match = re.search(r'urn:btih:([a-fA-F0-9]{40})', magnet_uri)
+        if match:
+            return match.group(1).lower()
+        return None
+
+    def fetch_torrent_file(self, info_hash):
+        """Try to download .torrent file from web cache"""
+        sess = requests.Session()
+        sess.headers.update({'User-Agent': 'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36'})
+        for url_template in TORRENT_CACHE_URLS:
+            url = url_template.replace("{hash}", info_hash.upper()).replace("{hash_lower}", info_hash.lower())
+            try:
+                logger.info(f"Fetching torrent: {url}")
+                resp = sess.get(url, timeout=10)
+                if resp.status_code == 200:
+                    data = resp.content
+                    if data[:7] == b'd8:anno' or data[:7] == b'd13:ann':
+                        tf = tempfile.NamedTemporaryFile(delete=False, suffix='.torrent')
+                        tf.write(data)
+                        tf.close()
+                        logger.info(f"Downloaded torrent ({len(data)} bytes)")
+                        return tf.name
+            except Exception as e:
+                logger.warning(f"  Failed: {url} -> {e}")
+        return None
+
+    def parse_magnet(self, magnet_uri):
+        info_hash = self.extract_info_hash(magnet_uri)
+        if info_hash:
+            logger.info("Trying web cache first...")
+            torrent_path = self.fetch_torrent_file(info_hash)
+            if torrent_path:
+                result = self._parse_torrent_file(torrent_path)
+                logger.info(f"Parsed via web cache: {result['name']}")
+                return result
+        logger.info("Web cache failed, trying DHT...")
+        params = {
+            'save_path': self.download_dir,
+            'storage_mode': lt.storage_mode_t.storage_mode_sparse,
+            'flags': lt.torrent_flags.auto_managed | lt.torrent_flags.sequential_download,
+        }
+        handle = lt.add_magnet_uri(self.session, magnet_uri, params)
+        waited = 0
+        while not handle.has_metadata() and waited < 10:
+            time.sleep(0.5)
+            waited += 0.5
+            if int(waited) % 5 == 0:
+                st = handle.status()
+                logger.info(f"  DHT: {waited}s, peers: {st.num_peers}")
+        if handle.has_metadata():
+            info = handle.torrent_file()
+            info_hash_str = str(handle.info_hash())
+            files = []
+            total_size = 0
+            for i in range(info.num_files()):
+                fe = info.file_at(i)
+                sz = fe.size
+                total_size += sz
+                files.append({'index':i, 'path':fe.path, 'size':sz, 'size_str':self._format_size(sz), 'offset':fe.offset})
+            result = {'info_hash':info_hash_str, 'name':info.name(), 'total_size':total_size,
+                      'total_size_str':self._format_size(total_size), 'num_files':len(files), 'files':files}
+            self.session.remove_torrent(handle)
+            logger.info(f"Parsed via DHT: {info.name()}")
+            return result
+        self.session.remove_torrent(handle)
+        raise TimeoutError("无法获取磁力元数据（在线缓存和 DHT 均无响应）")
+
+    def _parse_torrent_file(self, torrent_path):
+        info = lt.torrent_info(torrent_path)
+        info_hash = str(info.info_hash())
+        files = []
+        total_size = 0
+        for i in range(info.num_files()):
+            fe = info.file_at(i)
+            sz = fe.size if hasattr(fe, 'size') else 0
+            total_size += sz
+            files.append({'index':i, 'path':fe.path, 'size':sz, 'size_str':self._format_size(sz), 'offset':0})
+        os.unlink(torrent_path)
+        return {'info_hash':info_hash, 'name':info.name(), 'total_size':total_size,
+                'total_size_str':self._format_size(total_size), 'num_files':len(files), 'files':files}
+
+    def add_magnet_with_selection(self, magnet_uri, selected_indices, save_path=None):
+        if save_path is None: save_path = self.download_dir
+        info_hash = self.extract_info_hash(magnet_uri)
+        if info_hash:
+            torrent_path = self.fetch_torrent_file(info_hash)
+            if torrent_path:
+                return self._add_torrent_file_with_selection(torrent_path, selected_indices, save_path)
+        params = {
+            'save_path': save_path, 'storage_mode': lt.storage_mode_t.storage_mode_sparse,
+            'flags': lt.torrent_flags.auto_managed | lt.torrent_flags.sequential_download,
+        }
+        handle = lt.add_magnet_uri(self.session, magnet_uri, params)
+        waited = 0
+        while not handle.has_metadata() and waited < 10:
+            time.sleep(0.5); waited += 0.5
+        if not handle.has_metadata():
+            self.session.remove_torrent(handle)
+            raise TimeoutError("获取元数据超时")
+        info = handle.torrent_file()
+        info_hash_str = str(handle.info_hash())
+        num_files = info.num_files()
+        priorities = [0]*num_files
+        for i in range(num_files):
+            if i in selected_indices: priorities[i] = 4
+        handle.prioritize_files(priorities)
+        files = [{'index':i, 'path':info.file_at(i).path, 'size':info.file_at(i).size, 'offset':info.file_at(i).offset} for i in range(num_files)]
+        ti = {'handle':handle, 'info_hash':info_hash_str, 'name':info.name(), 'magnet_uri':magnet_uri,
+              'save_path':save_path, 'added_time':time.time(), 'total_size':info.total_size(),
+              'num_files':num_files, 'files':files}
+        with self.lock:
+            self.torrents[info_hash_str] = ti
+        logger.info(f"Downloading: {info.name()}")
+        return self._serialize_torrent(ti)
+
+    def _add_torrent_file_with_selection(self, torrent_path, selected_indices, save_path):
+        info = lt.torrent_info(torrent_path)
+        params = lt.add_torrent_params()
+        params.ti = info; params.save_path = save_path
+        params.storage_mode = lt.storage_mode_t.storage_mode_sparse
+        params.flags = lt.torrent_flags.auto_managed | lt.torrent_flags.sequential_download
+        handle = self.session.add_torrent(params)
+        info_hash = str(info.info_hash())
+        num_files = info.num_files()
+        priorities = [0]*num_files
+        for i in range(num_files):
+            if i in selected_indices: priorities[i] = 4
+        handle.prioritize_files(priorities)
+        files = [{'index':i, 'path':info.file_at(i).path, 'size':info.file_at(i).size, 'offset':info.file_at(i).offset} for i in range(num_files)]
+        ti = {'handle':handle, 'info_hash':info_hash, 'name':info.name(), 'magnet_uri':'',
+              'save_path':save_path, 'added_time':time.time(), 'total_size':info.total_size(),
+              'num_files':num_files, 'files':files}
+        os.unlink(torrent_path)
+        with self.lock:
+            self.torrents[info_hash] = ti
+        logger.info(f"Added from torrent: {info.name()}")
+        return self._serialize_torrent(ti)
+
+    def add_torrent_file(self, torrent_path, save_path=None):
+        if save_path is None: save_path = self.download_dir
+        info = lt.torrent_info(torrent_path)
+        params = lt.add_torrent_params()
+        params.ti = info; params.save_path = save_path
+        params.storage_mode = lt.storage_mode_t.storage_mode_sparse
+        params.flags = lt.torrent_flags.auto_managed | lt.torrent_flags.sequential_download
+        handle = self.session.add_torrent(params)
+        info_hash = str(info.info_hash())
+        files = [{'index':i, 'path':info.file_at(i).path, 'size':info.file_at(i).size, 'offset':info.file_at(i).offset} for i in range(info.num_files())]
+        ti = {'handle':handle, 'info_hash':info_hash, 'name':info.name(), 'magnet_uri':'',
+              'save_path':save_path, 'added_time':time.time(), 'total_size':info.total_size(),
+              'num_files':info.num_files(), 'files':files}
+        with self.lock:
+            self.torrents[info_hash] = ti
+        logger.info(f"Added torrent file: {info.name()}")
+        return self._serialize_torrent(ti)
+
+    def add_magnet(self, magnet_uri, save_path=None):
+        if save_path is None: save_path = self.download_dir
+        params = {
+            'save_path': save_path, 'storage_mode': lt.storage_mode_t.storage_mode_sparse,
+            'flags': lt.torrent_flags.auto_managed | lt.torrent_flags.sequential_download,
+        }
+        handle = lt.add_magnet_uri(self.session, magnet_uri, params)
+        waited = 0
+        while not handle.has_metadata() and waited < 10:
+            time.sleep(0.5); waited += 0.5
+        if not handle.has_metadata():
+            self.session.remove_torrent(handle)
+            raise TimeoutError("获取元数据超时")
+        info = handle.torrent_file()
+        info_hash_str = str(handle.info_hash())
+        files = [{'index':i, 'path':info.file_at(i).path, 'size':info.file_at(i).size, 'offset':info.file_at(i).offset} for i in range(info.num_files())]
+        ti = {'handle':handle, 'info_hash':info_hash_str, 'name':info.name(), 'magnet_uri':magnet_uri,
+              'save_path':save_path, 'added_time':time.time(), 'total_size':info.total_size(),
+              'num_files':info.num_files(), 'files':files}
+        with self.lock:
+            self.torrents[info_hash_str] = ti
+        return self._serialize_torrent(ti)
+
+    def remove_torrent(self, info_hash, delete_files=False):
+        with self.lock:
+            if info_hash not in self.torrents: return False
+            handle = self.torrents[info_hash]['handle']
+            self.session.remove_torrent(handle, 1 if delete_files else 0)
+            del self.torrents[info_hash]
+            return True
+
+    def get_torrents(self):
+        with self.lock:
+            return {k: self._serialize_torrent(v) for k, v in self.torrents.items()}
+
+    def get_torrent(self, info_hash):
+        with self.lock:
+            if info_hash not in self.torrents: return None
+            return self._serialize_torrent(self.torrents[info_hash])
+
+    def _serialize_torrent(self, ti):
+        handle = ti['handle']; status = handle.status()
+        sm = {lt.torrent_status.checking_files:'checking', lt.torrent_status.downloading_metadata:'downloading_metadata',
+              lt.torrent_status.downloading:'downloading', lt.torrent_status.finished:'finished',
+              lt.torrent_status.seeding:'seeding', lt.torrent_status.allocating:'allocating',
+              lt.torrent_status.checking_resume_data:'checking_resume_data'}
+        state = sm.get(status.state, 'unknown')
+        fp = []
+        try: fp = handle.file_progress()
+        except: pass
+        files = []
+        for i, f in enumerate(ti['files']):
+            fs = f['size']; fprog = fp[i] if i < len(fp) else 0
+            files.append({'index':f['index'], 'path':f['path'], 'size':fs, 'size_str':self._format_size(fs),
+                          'progress':(fprog/fs*100) if fs>0 else 0, 'downloaded':fprog, 'offset':f['offset']})
+        return {'info_hash':ti['info_hash'], 'name':ti['name'], 'magnet_uri':ti['magnet_uri'],
+                'save_path':ti['save_path'], 'added_time':ti['added_time'], 'total_size':ti['total_size'],
+                'total_size_str':self._format_size(ti['total_size']), 'num_files':ti['num_files'], 'state':state,
+                'progress':status.progress if hasattr(status,'progress') else 0.0,
+                'download_rate':status.download_rate, 'upload_rate':status.upload_rate,
+                'total_download':status.total_download, 'total_upload':status.total_upload,
+                'num_peers':status.num_peers, 'num_seeds':status.num_seeds,
+                'num_connections':status.num_connections,
+                'download_rate_str':self._format_speed(status.download_rate),
+                'upload_rate_str':self._format_speed(status.upload_rate), 'files':files}
+
+    def get_file_path(self, info_hash, file_index):
+        with self.lock:
+            if info_hash not in self.torrents: return None, None
+            if file_index >= len(self.torrents[info_hash]['files']): return None, None
+            f = self.torrents[info_hash]['files'][file_index]
+            return os.path.join(self.torrents[info_hash]['save_path'], f['path']), f['size']
+
+    @staticmethod
+    def _format_size(s):
+        if s == 0: return '0 B'
+        u = ['B','KB','MB','GB','TB']; i = 0; sz = float(s)
+        while sz >= 1024 and i < len(u)-1: sz /= 1024.0; i += 1
+        return f'{sz:.2f} {u[i]}'
+
+    @staticmethod
+    def _format_speed(s): return DownloadManager._format_size(s) + '/s'
+
+    def shutdown(self):
+        self.alert_thread_running = False
+        if self.alert_thread.is_alive(): self.alert_thread.join(timeout=2)
+        logger.info("Shutdown")
