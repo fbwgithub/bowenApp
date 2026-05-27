@@ -54,7 +54,7 @@ class TorrentViewModel : ViewModel() {
             .build()
 
         api = Retrofit.Builder()
-            .baseUrl("http://127.0.0.1:5000/")
+            .baseUrl("http://192.168.1.12:5000/")
             .client(client)
             .addConverterFactory(GsonConverterFactory.create())
             .build()
