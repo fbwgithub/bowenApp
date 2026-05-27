@@ -2,6 +2,7 @@ package com.bowenapp.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.bowenapp.data.ServerConfig
 import com.bowenapp.data.api.TorrentApi
 import com.bowenapp.data.api.SelectedDownloadRequest
 import com.bowenapp.data.model.*
@@ -18,7 +19,51 @@ import java.util.concurrent.TimeUnit
 
 class TorrentViewModel : ViewModel() {
 
-    private val api: TorrentApi
+    private var _api: TorrentApi? = null
+    private val api: TorrentApi get() {
+        if (_api == null) _api = createApi()
+        return _api!!
+    }
+
+    private fun createApi(): TorrentApi {
+        val logging = HttpLoggingInterceptor().apply { level = HttpLoggingInterceptor.Level.BASIC }
+        val client = OkHttpClient.Builder()
+            .addInterceptor(logging)
+            .connectTimeout(15, TimeUnit.SECONDS)
+            .readTimeout(30, TimeUnit.SECONDS)
+            .writeTimeout(30, TimeUnit.SECONDS)
+            .build()
+
+        return Retrofit.Builder()
+            .baseUrl(ServerConfig.getBaseUrl())
+            .client(client)
+            .addConverterFactory(GsonConverterFactory.create())
+            .build()
+            .create(TorrentApi::class.java)
+    }
+
+    fun updateBaseUrl(newUrl: String) {
+        ServerConfig.setBaseUrl(newUrl)
+        _api = null // will recreate on next access
+        startPolling()
+    }
+
+    private var pollingJob: kotlinx.coroutines.Job? = null
+
+    fun startPolling() {
+        pollingJob?.cancel()
+        pollingJob = viewModelScope.launch {
+            while (true) {
+                try {
+                    _torrents.value = api.listTorrents()
+                    _currentTorrent.value?.let { current ->
+                        _currentTorrent.value = api.getTorrent(current.infoHash)
+                    }
+                } catch (_: Exception) {}
+                delay(3000)
+            }
+        }
+    }
 
     private val _torrents = MutableStateFlow<List<TorrentInfo>>(emptyList())
     val torrents: StateFlow<List<TorrentInfo>> = _torrents.asStateFlow()
@@ -38,44 +83,30 @@ class TorrentViewModel : ViewModel() {
     private val _parsedSize = MutableStateFlow("")
     val parsedSize: StateFlow<String> = _parsedSize.asStateFlow()
 
+    private val _totalParsedSize = MutableStateFlow("")
+    val totalParsedSize: StateFlow<String> = _totalParsedSize.asStateFlow()
+
     private val _errorMessage = MutableStateFlow<String?>(null)
     val errorMessage: StateFlow<String?> = _errorMessage.asStateFlow()
 
     private val _streamUrl = MutableStateFlow(Pair("", ""))
     val streamUrl: StateFlow<Pair<String, String>> = _streamUrl.asStateFlow()
 
+    private val _stats = MutableStateFlow(StatsResponse())
+    val stats: StateFlow<StatsResponse> = _stats.asStateFlow()
+
     init {
-        val logging = HttpLoggingInterceptor().apply { level = HttpLoggingInterceptor.Level.BODY }
-        val client = OkHttpClient.Builder()
-            .addInterceptor(logging)
-            .connectTimeout(30, TimeUnit.SECONDS)
-            .readTimeout(60, TimeUnit.SECONDS)
-            .writeTimeout(30, TimeUnit.SECONDS)
-            .build()
-
-        api = Retrofit.Builder()
-            .baseUrl("http://192.168.1.12:5000/")
-            .client(client)
-            .addConverterFactory(GsonConverterFactory.create())
-            .build()
-            .create(TorrentApi::class.java)
-
         startPolling()
-    }
-
-    private fun startPolling() {
+        // Also poll stats
         viewModelScope.launch {
             while (true) {
-                try {
-                    _torrents.value = api.listTorrents()
-                    _currentTorrent.value?.let { current ->
-                        _currentTorrent.value = api.getTorrent(current.infoHash)
-                    }
-                } catch (_: Exception) {}
-                delay(2000)
+                try { _stats.value = api.getStats() } catch (_: Exception) {}
+                delay(5000)
             }
         }
     }
+
+    fun clearStream() { _streamUrl.value = Pair("", "") }
 
     fun parseMagnet(magnet: String) {
         viewModelScope.launch {
@@ -87,7 +118,7 @@ class TorrentViewModel : ViewModel() {
                 if (resp.success) {
                     _parsedFiles.value = resp.files
                     _parsedName.value = resp.name
-                    _parsedSize.value = resp.totalSizeStr
+                    _totalParsedSize.value = resp.totalSizeStr
                 } else {
                     _errorMessage.value = resp.error ?: "解析失败"
                 }
@@ -106,7 +137,7 @@ class TorrentViewModel : ViewModel() {
                 if (resp.success) {
                     _parsedFiles.value = emptyList()
                     _parsedName.value = ""
-                    _parsedSize.value = ""
+                    _totalParsedSize.value = ""
                 } else {
                     _errorMessage.value = resp.error ?: "下载失败"
                 }
@@ -138,9 +169,18 @@ class TorrentViewModel : ViewModel() {
     }
 
     fun playFile(infoHash: String, fileIndex: Int, filename: String) {
-        _streamUrl.value = Pair("/api/stream/$infoHash/$fileIndex", filename)
+        viewModelScope.launch {
+            try {
+                val magnet = _currentTorrent.value?.magnetUri ?: return@launch
+                val resp = api.playMagnet(PlayMagnetRequest(magnet, fileIndex))
+                if (resp.success) {
+                    _streamUrl.value = Pair(resp.streamUrl, filename)
+                } else {
+                    _errorMessage.value = resp.error ?: "播放失败"
+                }
+            } catch (e: Exception) {
+                _errorMessage.value = "播放失败: ${e.message}"
+            }
+        }
     }
-
-    fun clearStream() { _streamUrl.value = Pair("", "") }
-    fun clearError() { _errorMessage.value = null }
 }

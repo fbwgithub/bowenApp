@@ -8,6 +8,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -15,68 +16,31 @@ import com.bowenapp.data.model.TorrentInfo
 import com.bowenapp.ui.components.StatusBadge
 import com.bowenapp.ui.components.TorrentProgressBar
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TorrentListScreen(
     torrents: List<TorrentInfo>,
-    onAddClick: () -> Unit,
     onTorrentClick: (String) -> Unit
 ) {
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("下载列表") },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                    titleContentColor = MaterialTheme.colorScheme.onSurface
-                ),
-                actions = {
-                    TextButton(onClick = onAddClick) {
-                        Text("+ 添加磁力", color = MaterialTheme.colorScheme.primary)
-                    }
-                }
-            )
-        },
-        containerColor = MaterialTheme.colorScheme.background
-    ) { padding ->
-        if (torrents.isEmpty()) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(padding),
-                contentAlignment = Alignment.Center
-            ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(text = "📥", fontSize = 48.sp)
-                    Spacer(Modifier.height(16.dp))
-                    Text(
-                        "暂无下载任务",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    Text(
-                        "点击右上角添加磁力链接",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
+    if (torrents.isEmpty()) {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text("📥", fontSize = 40.sp)
+                Spacer(Modifier.height(8.dp))
+                Text("暂无下载任务", fontSize = 16.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Spacer(Modifier.height(4.dp))
+                Text("点击底部「添加」开始", fontSize = 12.sp, color = MaterialTheme.colorScheme.outline)
             }
-        } else {
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(padding),
-                contentPadding = PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                items(torrents, key = { it.infoHash }) { torrent ->
-                    TorrentCard(
-                        torrent = torrent,
-                        onClick = { onTorrentClick(torrent.infoHash) }
-                    )
-                }
-            }
+        }
+        return
+    }
+
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        items(torrents, key = { it.infoHash }) { t ->
+            TorrentCard(torrent = t, onClick = { onTorrentClick(t.infoHash) })
         }
     }
 }
@@ -90,12 +54,10 @@ private fun TorrentCard(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant
-        ),
-        shape = MaterialTheme.shapes.medium
+        shape = MaterialTheme.shapes.medium,
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
+        Column(modifier = Modifier.padding(14.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -103,8 +65,8 @@ private fun TorrentCard(
             ) {
                 Text(
                     text = torrent.name,
-                    style = MaterialTheme.typography.titleSmall,
-                    color = MaterialTheme.colorScheme.onSurface,
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.SemiBold,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f)
@@ -112,42 +74,25 @@ private fun TorrentCard(
                 Spacer(Modifier.width(8.dp))
                 StatusBadge(torrent.state)
             }
-
-            Spacer(Modifier.height(12.dp))
-
-            TorrentProgressBar(
-                progress = torrent.progress.toFloat(),
-                modifier = Modifier.fillMaxWidth()
-            )
-
             Spacer(Modifier.height(8.dp))
-
+            TorrentProgressBar(progress = torrent.progress.toFloat())
+            Spacer(Modifier.height(6.dp))
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                MetaItem("进度", "${(torrent.progress * 100).toInt()}%")
-                MetaItem("大小", torrent.totalSizeStr)
-                MetaItem("↓", torrent.downloadRateStr)
-                MetaItem("↑", torrent.uploadRateStr)
-                MetaItem("Peers", "${torrent.numPeers}")
+                InfoChip("进度", "${(torrent.progress * 100).toInt()}%")
+                InfoChip("大小", torrent.totalSizeStr)
+                InfoChip("速度", torrent.downloadRateStr)
             }
         }
     }
 }
 
 @Composable
-private fun MetaItem(label: String, value: String) {
+private fun InfoChip(label: String, value: String) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(
-            text = label,
-            fontSize = 10.sp,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Text(
-            text = value,
-            fontSize = 12.sp,
-            color = MaterialTheme.colorScheme.onSurface
-        )
+        Text(label, fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(value, fontSize = 11.sp, fontWeight = FontWeight.Medium)
     }
 }

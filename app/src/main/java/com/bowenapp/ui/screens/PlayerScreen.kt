@@ -5,15 +5,15 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.media3.common.MediaItem
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
-import com.bowenapp.ui.theme.BowenAppTheme
+import com.bowenapp.data.ServerConfig
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PlayerScreen(
     streamUrl: String,
@@ -21,13 +21,14 @@ fun PlayerScreen(
     onBack: () -> Unit
 ) {
     val context = LocalContext.current
-    val baseUrl = "http://127.0.0.1:5000"
+    val baseUrl = ServerConfig.getBaseUrl().removeSuffix("/")
 
     var player by remember { mutableStateOf<ExoPlayer?>(null) }
 
     DisposableEffect(context) {
+        val fullUrl = if (streamUrl.startsWith("http")) streamUrl else "$baseUrl$streamUrl"
         val exoPlayer = ExoPlayer.Builder(context).build().apply {
-            val mediaItem = MediaItem.fromUri("$baseUrl$streamUrl")
+            val mediaItem = MediaItem.fromUri(fullUrl)
             setMediaItem(mediaItem)
             prepare()
             playWhenReady = true
@@ -36,30 +37,21 @@ fun PlayerScreen(
         onDispose { exoPlayer.release() }
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text(fileName, maxLines = 1) },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                    titleContentColor = MaterialTheme.colorScheme.onSurface
-                ),
-                navigationIcon = {
-                    TextButton(onClick = {
-                        player?.release()
-                        onBack()
-                    }) { Text("← 返回") }
-                }
-            )
-        },
-        containerColor = MaterialTheme.colorScheme.background
-    ) { padding ->
-        Box(
+    Column(modifier = Modifier.fillMaxSize().background(Color.Black)) {
+        // Top bar
+        Row(
             modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .background(androidx.compose.ui.graphics.Color.Black)
+                .fillMaxWidth()
+                .background(Color(0xFF1A1A2E))
+                .padding(horizontal = 8.dp, vertical = 8.dp)
         ) {
+            TextButton(onClick = {
+                player?.release()
+                onBack()
+            }) { Text("← 返回", color = Color.White) }
+        }
+
+        Box(modifier = Modifier.fillMaxSize()) {
             player?.let {
                 AndroidView(
                     modifier = Modifier.fillMaxSize(),
