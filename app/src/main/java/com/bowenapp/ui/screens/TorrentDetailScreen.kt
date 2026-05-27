@@ -87,7 +87,7 @@ fun TorrentDetailScreen(
 
                         val items = listOf(
                             "总大小" to torrent.totalSizeStr,
-                            "已下载" to formatBytes(torrent.total_download),
+                            "已下载" to formatBytes(torrent.totalDownload),
                             "下载速度" to torrent.downloadRateStr,
                             "上传速度" to torrent.uploadRateStr,
                             "Peers" to "${torrent.numPeers}",
