@@ -4,11 +4,14 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material.ExperimentalMaterialApi
+import androidx.compose.material.pullrefresh.PullRefreshIndicator
+import androidx.compose.material.pullrefresh.pullRefresh
+import androidx.compose.material.pullrefresh.rememberPullRefreshState
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -17,7 +20,7 @@ import com.bowenapp.data.model.TorrentInfo
 import com.bowenapp.ui.components.StatusBadge
 import com.bowenapp.ui.components.TorrentProgressBar
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterialApi::class)
 @Composable
 fun TorrentListScreen(
     torrents: List<TorrentInfo>,
@@ -28,21 +31,10 @@ fun TorrentListScreen(
     isRefreshing: Boolean = false,
     onRefresh: () -> Unit = {}
 ) {
-    val pullRefreshState = rememberPullToRefreshState()
-
-    // Trigger refresh when pull gesture completes
-    LaunchedEffect(pullRefreshState.isRefreshing) {
-        if (pullRefreshState.isRefreshing) {
-            onRefresh()
-        }
-    }
-
-    // End refresh animation when data loading finishes
-    LaunchedEffect(isRefreshing) {
-        if (!isRefreshing) {
-            pullRefreshState.endRefresh()
-        }
-    }
+    val pullRefreshState = rememberPullRefreshState(
+        refreshing = isRefreshing,
+        onRefresh = onRefresh
+    )
 
     if (torrents.isEmpty() && !isRefreshing) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -60,9 +52,10 @@ fun TorrentListScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .nestedScroll(pullRefreshState.nestedScrollConnection)
+            .pullRefresh(pullRefreshState)
     ) {
         LazyColumn(
+            modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
@@ -77,9 +70,11 @@ fun TorrentListScreen(
             }
         }
 
-        PullToRefreshContainer(
+        PullRefreshIndicator(
+            refreshing = isRefreshing,
             state = pullRefreshState,
-            modifier = Modifier.align(Alignment.TopCenter)
+            modifier = Modifier.align(Alignment.TopCenter),
+            contentColor = MaterialTheme.colorScheme.primary
         )
     }
 }
