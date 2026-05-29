@@ -9,3 +9,8 @@ __pycache__
 *.pyc
 downloads
 *.log
+node_modules
+torrent_cache
+.server_pid
+torrents_state.json
+downloads/

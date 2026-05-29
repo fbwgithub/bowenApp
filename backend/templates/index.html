@@ -66,7 +66,7 @@ textarea.input { min-height:80px; resize:vertical; font-family:inherit; }
 .tab-item .tab-icon { font-size:20px; display:block; margin-bottom:1px; }
 .tab-item:active { opacity:.7; }
 
-/* Detail View as overlay sheet */
+/* Detail View */
 .detail-sheet { position:fixed; top:0; left:0; right:0; bottom:0; background:#0f0f1a; z-index:50; overflow-y:auto; }
 .detail-head { background:#16213e; padding:12px 16px; display:flex; align-items:center; gap:12px; border-bottom:1px solid #2a2a4a; position:sticky; top:0; z-index:5; }
 .detail-head .back-btn { font-size:20px; cursor:pointer; padding:4px; }
@@ -81,29 +81,34 @@ textarea.input { min-height:80px; resize:vertical; font-family:inherit; }
 .detail-progress-fill { height:100%; background:linear-gradient(90deg,#4fc3f7,#7c4dff); border-radius:3px; transition:width .3s; }
 .detail-actions { display:flex; gap:8px; margin-bottom:12px; }
 .detail-files-title { font-size:14px; font-weight:600; margin-bottom:8px; }
-.detail-file-item { display:flex; align-items:center; padding:10px 12px; gap:8px; background:#0f0f1a; border-radius:8px; margin-bottom:4px; }
-.detail-file-item .df-name { flex:1; font-size:12px; word-break:break-all; }
+.detail-file-item { display:flex; align-items:center; padding:8px 10px; gap:8px; background:#0f0f1a; border-radius:6px; margin-bottom:4px; }
+.detail-file-item .df-name { flex:1; font-size:13px; word-break:break-all; }
 .detail-file-item .df-progress { font-size:11px; color:#8899b4; white-space:nowrap; }
 
+/* Play Overlay */
+.play-overlay { position:fixed; top:0; left:0; right:0; bottom:0; background:#000; z-index:100; display:flex; flex-direction:column; }
+.play-top { background:#16213e; padding:10px 16px; }
+.play-top button { background:none; border:none; color:#4fc3f7; font-size:14px; }
+#playVideo { flex:1; width:100%; }
+
 /* Delete Dialog */
-.del-overlay { position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.7); z-index:200; display:flex; align-items:center; justify-content:center; }
-.del-box { background:#16213e; border:1px solid #2a2a4a; border-radius:14px; width:88%; max-width:320px; padding:20px; }
-.del-box h3 { font-size:16px; margin-bottom:8px; }
-.del-box .del-name { font-size:13px; color:#8899b4; margin-bottom:14px; word-break:break-all; }
-.del-box label { display:block; padding:10px 0; cursor:pointer; font-size:14px; }
-.del-box input[type="radio"] { accent-color:#4fc3f7; margin-right:8px; }
-.del-actions { display:flex; gap:8px; justify-content:flex-end; margin-top:14px; }
+.del-overlay { position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.6); z-index:80; display:flex; align-items:center; justify-content:center; }
+.del-box { background:#16213e; border:1px solid #2a2a4a; border-radius:12px; padding:20px; width:80%; max-width:320px; }
+.del-box h3 { margin-bottom:8px; font-size:16px; }
+.del-name { color:#8899b4; font-size:13px; margin-bottom:12px; word-break:break-all; }
+.del-box label { display:block; margin:8px 0; font-size:14px; }
+.del-box input[type="radio"] { margin-right:8px; accent-color:#4fc3f7; }
+.del-actions { display:flex; gap:8px; margin-top:16px; justify-content:flex-end; }
 
-/* Play overlay */
-.play-overlay { position:fixed; top:0; left:0; right:0; bottom:0; background:#000; z-index:300; display:flex; flex-direction:column; }
-.play-overlay .play-top { padding:8px 12px; background:#1a1a2e; display:flex; align-items:center; }
-.play-overlay .play-top button { background:none; border:none; color:#fff; font-size:16px; cursor:pointer; padding:4px 8px; }
-.play-overlay video { flex:1; width:100%; object-fit:contain; }
-
-/* Parse result */
-.parse-info { background:#0f0f1a; border:1px solid #4fc3f7; border-radius:10px; padding:12px; margin-top:12px; }
-.parse-info .pi-name { font-weight:600; font-size:14px; margin-bottom:4px; }
-.parse-info .pi-meta { font-size:12px; color:#8899b4; }
+/* Parse info */
+.parse-info { margin:8px 12px; padding:14px; border:1px solid #2a2a4a; border-radius:10px; background:#16213e; }
+.pi-name { font-weight:600; font-size:14px; margin-bottom:4px; word-break:break-all; }
+.pi-meta { font-size:11px; color:#8899b4; }
+</style>
+<script src="/webtorrent.min.js" defer></script>
+<style>
+.stream-progress { height:4px; background:#0f0f1a; border-radius:2px; margin:6px 0; overflow:hidden; }
+.stream-progress-fill { height:100%; background:linear-gradient(90deg,#4fc3f7,#7c4dff); border-radius:2px; transition:width .5s; }
 </style>
 </head>
 <body>
@@ -117,41 +122,34 @@ textarea.input { min-height:80px; resize:vertical; font-family:inherit; }
   </div>
 </div>
 
-<!-- ====== Tab 1: 任务列表 ====== -->
-<div id="pageTasks" class="tab-page">
+<!-- ====== Tab 1: 添加磁力 ====== -->
+<div id="pageAdd" class="tab-page">
+  <div class="card" style="margin-top:12px">
+    <div style="font-weight:600;margin-bottom:8px;font-size:14px">磁力链接</div>
+    <textarea id="magnetInput" class="input" placeholder="magnet:?xt=urn:btih:..."></textarea>
+    <button class="btn btn-primary btn-block mt12" id="parseBtn" onclick="doParse()">解析磁力链接</button>
+  </div>
+  <div id="parseResult" class="hidden"></div>
+  <div id="fileListArea" class="hidden">
+    <div class="card" style="margin-top:8px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <span style="font-weight:600;font-size:14px">选择文件</span>
+        <button class="btn btn-sm btn-ghost" onclick="selAll()" id="selAllBtn">全选</button>
+      </div>
+      <div id="fileList"></div>
+      <button class="btn btn-primary btn-block mt12" id="dlBtn" onclick="doDownload()">下载选中文件</button>
+    </div>
+  </div>
+</div>
+
+<!-- ====== Tab 2: 任务列表 ====== -->
+<div id="pageTasks" class="tab-page hidden">
   <div id="tasksEmpty" class="empty-state">
     <div style="font-size:40px;margin-bottom:12px">📥</div>
     <div>暂无下载任务</div>
     <div style="font-size:12px;margin-top:4px;color:#555">点击底部「添加」开始</div>
   </div>
   <div id="tasksList"></div>
-</div>
-
-<!-- ====== Tab 2: 添加磁力 ====== -->
-<div id="pageAdd" class="tab-page hidden">
-  <div class="card" style="margin-top:12px">
-    <div style="font-weight:600;margin-bottom:8px;font-size:14px">磁力链接</div>
-    <textarea id="magnetInput" class="input" placeholder="magnet:?xt=urn:btih:..."></textarea>
-    <button class="btn btn-primary btn-block mt12" id="parseBtn" onclick="doParse()">解析磁力链接</button>
-  </div>
-
-  <div id="parseResult" class="hidden">
-    <div class="parse-info">
-      <div class="pi-name" id="piName"></div>
-      <div class="pi-meta" id="piMeta"></div>
-    </div>
-  </div>
-
-  <div id="fileListArea" class="hidden">
-    <div class="card" style="margin-top:8px">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-        <span style="font-weight:600;font-size:14px">选择文件</span>
-        <button class="btn btn-sm btn-ghost" onclick="selAll()">全选</button>
-      </div>
-      <div id="fileList"></div>
-      <button class="btn btn-primary btn-block mt12" id="dlBtn" onclick="doDownload()">下载选中文件</button>
-    </div>
-  </div>
 </div>
 
 <!-- ====== Tab 3: 关于 ====== -->
@@ -168,10 +166,9 @@ textarea.input { min-height:80px; resize:vertical; font-family:inherit; }
   <div class="card">
     <div style="font-size:14px;font-weight:600;margin-bottom:8px">📌 提示</div>
     <ul style="font-size:12px;color:#8899b4;line-height:1.8;padding-left:16px">
-      <li>支持磁力链接和 .torrent 文件</li>
+      <li>支持磁力链接</li>
       <li>解析后可选择指定文件下载</li>
       <li>视频文件支持在线播放</li>
-      <li>下载完成后可获取文件</li>
     </ul>
   </div>
 </div>
@@ -203,6 +200,7 @@ textarea.input { min-height:80px; resize:vertical; font-family:inherit; }
 <div id="playOverlay" class="play-overlay hidden">
   <div class="play-top">
     <button onclick="closePlay()">← 返回</button>
+    <span id="playStatus" style="font-size:12px;color:#8899b4;margin-left:12px"></span>
   </div>
   <video id="playVideo" controls autoplay></video>
 </div>
@@ -210,10 +208,10 @@ textarea.input { min-height:80px; resize:vertical; font-family:inherit; }
 <!-- Bottom Tab Bar -->
 <div class="tab-bar">
   <div class="tab-item active" id="tab1" onclick="switchTab(1)">
-    <span class="tab-icon">📥</span> 任务
+    <span class="tab-icon">➕</span> 添加
   </div>
   <div class="tab-item" id="tab2" onclick="switchTab(2)">
-    <span class="tab-icon">➕</span> 添加
+    <span class="tab-icon">📥</span> 任务
   </div>
   <div class="tab-item" id="tab3" onclick="switchTab(3)">
     <span class="tab-icon">📊</span> 统计
@@ -229,42 +227,82 @@ let delHash = '';
 
 function q(id) { return document.getElementById(id); }
 
-// Tab switching
 function switchTab(n) {
   ['tab1','tab2','tab3'].forEach((id,i) => {
     q(id).classList.toggle('active', i+1 === n);
   });
-  ['pageTasks','pageAdd','pageAbout'].forEach((id,i) => {
+  ['pageAdd','pageTasks','pageAbout'].forEach((id,i) => {
     q(id).classList.toggle('hidden', i+1 !== n);
   });
-  if (n === 1) loadTorrents();
-  if (n === 2) resetAdd();
+  if (n === 1) resetAdd();
+  if (n === 2) loadTorrents();
   if (n === 3) updateAbout();
 }
+
+// Touch swipe support
+let touchStartX = 0;
+let touchStartY = 0;
+document.addEventListener('touchstart', function(e) {
+  touchStartX = e.changedTouches[0].screenX;
+  touchStartY = e.changedTouches[0].screenY;
+}, {passive: true});
+
+document.addEventListener('touchend', function(e) {
+  const dx = e.changedTouches[0].screenX - touchStartX;
+  const dy = e.changedTouches[0].screenY - touchStartY;
+  // Only horizontal swipes (ignore vertical scrolling)
+  if (Math.abs(dx) < Math.abs(dy) * 1.5 || Math.abs(dx) < 50) return;
+  
+  // Find current active tab
+  let current = 1;
+  if (q('tab2').classList.contains('active')) current = 2;
+  else if (q('tab3').classList.contains('active')) current = 3;
+  
+  if (dx > 0 && current > 1) switchTab(current - 1);  // swipe right → prev tab
+  else if (dx < 0 && current < 3) switchTab(current + 1);  // swipe left → next tab
+}, {passive: true});
 
 async function api(url, opt) {
   try {
     const r = await fetch(BASE + url, {
       headers:{'Content-Type':'application/json'},
-      signal: AbortSignal.timeout(30000),
+      signal: AbortSignal.timeout(15000),
       ...opt
     });
     return await r.json();
   } catch(e) { return null; }
 }
 
-// ==== Tasks List ====
+// ==== Tasks ====
 async function loadTorrents() {
   const d = await api('/api/torrents');
   if (!d) return;
   torrents = {};
   d.forEach(t => torrents[t.info_hash] = t);
-  renderTasks();
-  const s = await api('/api/stats');
-  if (s) {
-    q('s-total').textContent = s.total_torrents;
-    q('s-dl').textContent = s.total_download_rate;
+  
+  // Also add WebTorrent torrents if available
+  if (wtClient) {
+    wtClient.torrents.forEach(function(wt) {
+      if (wt.infoHash) torrents[wt.infoHash] = {
+        info_hash: wt.infoHash,
+        name: wt.name,
+        state: 'downloading',
+        progress: wt.progress,
+        download_rate: wt.downloadSpeed,
+        upload_rate: wt.uploadSpeed,
+        num_peers: wt.numPeers,
+        total_size: wt.length,
+        total_size_str: (wt.length / 1024 / 1024).toFixed(1) + ' MB',
+        download_rate_str: (wt.downloadSpeed / 1024 / 1024).toFixed(1) + ' MB/s',
+        upload_rate_str: (wt.uploadSpeed / 1024 / 1024).toFixed(1) + ' MB/s',
+      };
+    });
   }
+  
+  renderTasks();
+  api('/api/stats').then(s => {
+    if (s) { q('s-total').textContent = s.total_torrents + (wtClient ? wtClient.torrents.length : 0); q('s-dl').textContent = s.total_download_rate; }
+  });
 }
 
 function renderTasks() {
@@ -281,63 +319,26 @@ function renderTasks() {
     const stateMap = {downloading:'下载中',finished:'已完成',seeding:'做种中',paused:'已暂停',downloading_metadata:'获取信息',checking_files:'检查中'};
     const badgeMap = {downloading:'badge-dl',finished:'badge-done',seeding:'badge-done',paused:'badge-paused'};
     const pct = (t.progress*100).toFixed(1);
-    return `<div class="task-item">
-      <div class="task-head" onclick="openDetail('${t.info_hash}')">
-        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px">
-          <div class="task-title">${esc(t.name)}</div>
-          <span class="badge ${badgeMap[t.state]||'badge-dl'}">${stateMap[t.state]||t.state}</span>
-        </div>
-        <div class="task-progress"><div class="task-progress-fill" style="width:${pct}%"></div></div>
-        <div class="task-meta">进度 <b>${pct}%</b> 大小 <b>${t.total_size_str}</b> 速度 <b>${t.download_rate_str}</b> 节点 <b>${t.num_peers}</b></div>
-      </div>
-      <div class="task-actions">
-        ${t.state==='paused'
-          ? `<button class="btn btn-sm btn-primary" onclick="event.stopPropagation();doResume('${t.info_hash}')">▶ 继续</button>`
-          : `<button class="btn btn-sm btn-ghost" onclick="event.stopPropagation();doPause('${t.info_hash}')">⏸ 暂停</button>`}
-        <button class="btn btn-sm btn-danger" onclick="event.stopPropagation();showDel('${t.info_hash}','${esc(t.name)}')">🗑 删除</button>
-      </div>
-    </div>`;
+    return '<div class="task-item"><div class="task-head" onclick="openDetail(\''+t.info_hash+'\')"><div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px"><div class="task-title">'+esc(t.name)+'</div><span class="badge '+(badgeMap[t.state]||'badge-dl')+'">'+(stateMap[t.state]||t.state)+'</span></div><div class="task-progress"><div class="task-progress-fill" style="width:'+pct+'%"></div></div><div class="task-meta">进度 <b>'+pct+'%</b> 大小 <b>'+t.total_size_str+'</b> 速度 <b>'+t.download_rate_str+'</b> 节点 <b>'+t.num_peers+'</b></div></div><div class="task-actions">'+(t.state==='paused'?'<button class="btn btn-sm btn-primary" onclick="event.stopPropagation();doResume(\''+t.info_hash+'\')">▶ 继续</button>':'<button class="btn btn-sm btn-ghost" onclick="event.stopPropagation();doPause(\''+t.info_hash+'\')">⏸ 暂停</button>')+'<button class="btn btn-sm btn-danger" onclick="event.stopPropagation();showDel(\''+t.info_hash+'\',\''+esc(t.name)+'\')">🗑 删除</button></div></div>';
   }).join('');
 }
 
 async function doPause(h) { await api('/api/torrents/'+h+'/pause',{method:'POST'}); loadTorrents(); }
 async function doResume(h) { await api('/api/torrents/'+h+'/resume',{method:'POST'}); loadTorrents(); }
 
-// ==== Detail View ====
+// ==== Detail ====
 async function openDetail(h) {
-  const t = await api('/api/torrents/' + h);
+  const t = await api('/api/torrents/'+h);
   if (!t) return;
   q('detailSheet').classList.remove('hidden');
   q('dtName').textContent = t.name;
   const pct = (t.progress*100).toFixed(1);
-  let html = `<div class="detail-info">
-    <div class="detail-info-item"><div class="label">状态</div><div class="value">${t.state}</div></div>
-    <div class="detail-info-item"><div class="label">进度</div><div class="value">${pct}%</div></div>
-    <div class="detail-info-item"><div class="label">大小</div><div class="value">${t.total_size_str}</div></div>
-    <div class="detail-info-item"><div class="label">节点</div><div class="value">${t.num_peers}</div></div>
-    <div class="detail-info-item"><div class="label">下载</div><div class="value">${t.download_rate_str}</div></div>
-    <div class="detail-info-item"><div class="label">上传</div><div class="value">${t.upload_rate_str}</div></div>
-  </div>
-  <div class="detail-progress"><div class="detail-progress-fill" style="width:${pct}%"></div></div>
-  <div class="detail-actions">
-    ${t.state==='paused'
-      ? `<button class="btn btn-primary" onclick="dtResume('${h}')">▶ 继续</button>`
-      : `<button class="btn btn-ghost" onclick="dtPause('${h}')">⏸ 暂停</button>`}
-    <button class="btn btn-danger" onclick="closeDetail();showDel('${h}','${esc(t.name)}')">🗑 删除</button>
-  </div>
-  <div class="detail-files-title">📁 文件 (${t.files.length})</div>`;
-
+  let html = '<div class="detail-info"><div class="detail-info-item"><div class="label">状态</div><div class="value">'+t.state+'</div></div><div class="detail-info-item"><div class="label">进度</div><div class="value">'+pct+'%</div></div><div class="detail-info-item"><div class="label">大小</div><div class="value">'+t.total_size_str+'</div></div><div class="detail-info-item"><div class="label">节点</div><div class="value">'+t.num_peers+'</div></div><div class="detail-info-item"><div class="label">下载</div><div class="value">'+t.download_rate_str+'</div></div><div class="detail-info-item"><div class="label">上传</div><div class="value">'+t.upload_rate_str+'</div></div></div><div class="detail-progress"><div class="detail-progress-fill" style="width:'+pct+'%"></div></div><div class="detail-actions">'+(t.state==='paused'?'<button class="btn btn-primary" onclick="dtResume(\''+h+'\')">▶ 继续</button>':'<button class="btn btn-ghost" onclick="dtPause(\''+h+'\')">⏸ 暂停</button>')+'<button class="btn btn-danger" onclick="closeDetail();showDel(\''+h+'\',\''+esc(t.name)+'\')">🗑 删除</button></div><div class="detail-files-title">📁 文件 ('+t.files.length+')</div>';
   t.files.forEach(f => {
     const ext = (f.path.split('.').pop()||'').toLowerCase();
     const isV = ['mp4','mkv','avi','mov','wmv','flv','webm','m4v'].includes(ext);
     const icon = {mp4:'🎬',mkv:'🎬',avi:'🎬',mov:'🎬',mp3:'🎵',flv:'🎬',webm:'🎬'}[ext]||'📁';
-    html += `<div class="detail-file-item">
-      <span>${icon}</span>
-      <span class="df-name">${esc(f.path.split('/').pop()||f.path)} <span style="color:#8899b4;font-size:10px">${f.size_str}</span></span>
-      <span class="df-progress">${f.progress.toFixed(0)}%</span>
-      ${isV ? `<button class="btn btn-sm btn-primary" onclick="playFile('${h}',${f.index})">▶</button>` : ''}
-      <button class="btn btn-sm btn-ghost" onclick="dlFile('${h}',${f.index})">💾</button>
-    </div>`;
+    html += '<div class="detail-file-item"><span>'+icon+'</span><span class="df-name">'+esc(f.path.split('/').pop()||f.path)+' <span style="color:#8899b4;font-size:10px">'+f.size_str+'</span></span><span class="df-progress">'+f.progress.toFixed(0)+'%</span>'+(isV?'<button class="btn btn-sm btn-primary" onclick="playFile(\''+h+'\','+f.index+')">▶</button>':'')+'<button class="btn btn-sm btn-ghost" onclick="dlFile(\''+h+'\','+f.index+')">💾</button></div>';
   });
   q('dtBody').innerHTML = html;
 }
@@ -345,60 +346,46 @@ async function openDetail(h) {
 function closeDetail() { q('detailSheet').classList.add('hidden'); }
 async function dtPause(h) { await api('/api/torrents/'+h+'/pause',{method:'POST'}); openDetail(h); }
 async function dtResume(h) { await api('/api/torrents/'+h+'/resume',{method:'POST'}); openDetail(h); }
-
-function playFile(h,i) {
-  q('playOverlay').classList.remove('hidden');
-  q('playVideo').src = '/api/stream/' + h + '/' + i;
+async function playFile(h,i) { q('playOverlay').classList.remove('hidden');q('playVideo').src='/api/stream/'+h+'/'+i; }
+async function dlFile(h,i) { window.open('/api/download/'+h+'/'+i); }
+function closePlay() { 
+  q('playOverlay').classList.add('hidden'); q('playVideo').pause(); q('playVideo').src=''; 
+  if (wtTorrent) { wtTorrent.destroy(); wtTorrent = null; }
+  const p = q('wtProgress'); if (p) p.remove();
 }
-function closePlay() { q('playOverlay').classList.add('hidden'); q('playVideo').src = ''; }
-function dlFile(h,i) { window.open('/api/download/'+h+'/'+i,'_blank'); }
 
-// ==== Add Magnet ====
+// ==== Parse ====
 function resetAdd() {
   q('magnetInput').value = '';
   q('parseResult').classList.add('hidden');
   q('fileListArea').classList.add('hidden');
-  q('fileList').innerHTML = '';
-  q('parseBtn').disabled = false;
-  q('parseBtn').textContent = '解析磁力链接';
-  parsed = null; selected = new Set();
+  parsed = null;
+  selected = new Set();
 }
 
 async function doParse() {
   const magnet = q('magnetInput').value.trim();
-  if (!magnet.startsWith('magnet:')) {
-    q('parseResult').classList.remove('hidden');
-    q('parseResult').innerHTML = '<div class="parse-info" style="border-color:#ef5350"><div style="color:#ef5350">请输入有效的磁力链接</div></div>';
-    return;
-  }
+  if (!magnet) return alert('请输入磁力链接');
   q('parseBtn').disabled = true;
   q('parseBtn').textContent = '⏳ 解析中...';
-  q('parseResult').classList.add('hidden');
-  q('fileListArea').classList.add('hidden');
-
-  const r = await fetch(BASE + '/api/magnet/parse', {
-    method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({magnet})
+  const r = await api('/api/magnet/parse', {
+    method:'POST', body:JSON.stringify({magnet})
   });
-  const j = await r.json();
   q('parseBtn').disabled = false;
   q('parseBtn').textContent = '解析磁力链接';
-
-  if (!j.success) {
+  if (!r || !r.success) {
     q('parseResult').classList.remove('hidden');
-    q('parseResult').innerHTML = `<div class="parse-info" style="border-color:#ef5350"><div style="color:#ef5350">❌ ${esc(j.error||'解析失败')}</div></div>`;
+    q('parseResult').innerHTML = '<div class="parse-info" style="border-color:#ef5350"><div style="color:#ef5350">❌ '+(r?.error||'请求失败')+'</div></div>';
     return;
   }
-
-  parsed = {magnet, name: j.name, files: j.files};
-  q('piName').textContent = '📁 ' + j.name;
-  q('piMeta').textContent = '大小: ' + j.total_size_str + ' | 文件: ' + j.files.length + ' 个';
+  parsed = {magnet, name: r.name, files: r.files};
   q('parseResult').classList.remove('hidden');
-
-  selected = new Set(j.files.map(f => f.index));
-  renderFiles(j.files);
+  q('parseResult').innerHTML = '<div class="parse-info"><div class="pi-name">📁 '+esc(r.name)+'</div><div class="pi-meta">大小: '+r.total_size_str+' | 文件: '+r.files.length+' 个</div></div>';
+  selected = new Set(r.files.map(f => f.index));
+  renderFiles(r.files);
   q('fileListArea').classList.remove('hidden');
-  q('dlBtn').textContent = '📥 下载选中 (' + selected.size + '/' + j.files.length + ')';
+  q('dlBtn').textContent = '📥 下载选中 ('+selected.size+'/'+r.files.length+')';
+  q('selAllBtn').textContent = selected.size===r.files.length ? '取消全选' : '全选';
 }
 
 function renderFiles(files) {
@@ -408,55 +395,179 @@ function renderFiles(files) {
     const ext = (f.path.split('.').pop()||'').toLowerCase();
     const icon = {mp4:'🎬',mkv:'🎬',avi:'🎬',mov:'🎬',mp3:'🎵',flv:'🎬',webm:'🎬'}[ext]||'📁';
     const isV = ['mp4','mkv','avi','mov','wmv','flv','webm','m4v'].includes(ext);
+    const checked = selected.has(f.index) ? 'checked' : '';
     const d = document.createElement('div');
     d.className = 'file-item';
-    d.innerHTML = `<span class="file-icon">${icon}</span>
-      <span class="file-name">${esc(f.path.split('/').pop()||f.path)} <span class="file-size">${f.size_str}</span></span>
-      ${isV ? `<button class="btn btn-sm btn-primary" onclick="event.stopPropagation();playParsed(${f.index})">▶</button>` : ''}
-      <input type="checkbox" class="file-check" checked onchange="event.stopPropagation();toggleSel(${f.index})">`;
-    d.onclick = function() { toggleSel(f.index); };
+    d.innerHTML = '<span class="file-icon">'+icon+'</span><span class="file-name">'+esc(f.path.split('/').pop()||f.path)+' <span class="file-size">'+f.size_str+'</span></span>'+(isV?'<button class="btn btn-sm btn-primary" onclick="event.stopPropagation();playParsed('+f.index+')">▶</button>':'')+'<input type="checkbox" class="file-check" '+checked+' onchange="event.stopPropagation();doCheck('+f.index+',this)">';
+    d.onclick = function(e) { if (e.target.tagName!=='BUTTON'&&e.target.tagName!=='INPUT') toggleSel(f.index); };
     list.appendChild(d);
   });
 }
 
 function toggleSel(i) {
   if (selected.has(i)) selected.delete(i); else selected.add(i);
-  updateSel(); renderFiles(parsed.files);
+  updateSel();
+  // just update checkbox state without re-rendering everything
+  const cb = document.querySelector('.file-item:nth-child('+(i+1)+') .file-check');
+  if (cb) cb.checked = selected.has(i);
+}
+function doCheck(i, cb) {
+  if (cb.checked) selected.add(i); else selected.delete(i);
+  updateSel();
 }
 function selAll() {
   if (!parsed) return;
-  selected = new Set(parsed.files.map(f => f.index));
-  updateSel(); renderFiles(parsed.files);
+  const allSelected = selected.size === parsed.files.length;
+  if (allSelected) {
+    selected = new Set();
+  } else {
+    selected = new Set(parsed.files.map(f => f.index));
+  }
+  // Update all checkboxes
+  document.querySelectorAll('.file-check').forEach(cb => { cb.checked = selected.size === parsed.files.length; });
+  updateSel();
 }
 function updateSel() {
-  if (parsed) q('dlBtn').textContent = '📥 下载选中 (' + selected.size + '/' + parsed.files.length + ')';
+  if (parsed) {
+    q('dlBtn').textContent = '📥 下载选中 ('+selected.size+'/'+parsed.files.length+')';
+    q('selAllBtn').textContent = selected.size===parsed.files.length ? '取消全选' : '全选';
+  }
 }
 
 async function doDownload() {
   if (!parsed || !selected.size) return;
   q('dlBtn').disabled = true;
-  const r = await api('/api/magnet/download', {
-    method:'POST', body:JSON.stringify({magnet:parsed.magnet, selectedFiles:Array.from(selected)})
-  });
-  q('dlBtn').disabled = false;
-  if (r?.success) {
-    switchTab(1);
-  } else {
-    alert('下载失败: ' + (r?.error||'未知错误'));
+  q('dlBtn').textContent = '⏳ 添加下载...';
+  
+  // Use WebTorrent in browser for actual P2P download
+  if (!wtClient) wtClient = new WebTorrent();
+  
+  try {
+    const selectedFiles = Array.from(selected);
+    wtClient.add(parsed.magnet, { path: '/downloads' }, function(torrent) {
+      // Select only the chosen files
+      torrent.files.forEach(function(f, idx) {
+        if (selectedFiles.includes(idx)) {
+          f.select();
+        } else {
+          f.deselect();
+        }
+      });
+      switchTab(2);
+      loadTorrents();
+    });
+  } catch(e) {
+    alert('下载失败: ' + e.message);
   }
+  
+  q('dlBtn').disabled = false;
+  q('dlBtn').textContent = '📥 下载选中 ('+selected.size+'/'+parsed.files.length+')';
 }
+
+let wtClient = null;
+let wtTorrent = null;
 
 async function playParsed(i) {
   if (!parsed) return;
-  const r = await api('/api/magnet/play', {
-    method:'POST', body:JSON.stringify({magnet:parsed.magnet, file_index:i})
-  });
-  if (r?.success) {
-    q('playOverlay').classList.remove('hidden');
-    q('playVideo').src = r.stream_url;
-  } else {
-    alert('播放失败: ' + (r?.error||'未知错误'));
+  q('playOverlay').classList.remove('hidden');
+  q('playVideo').src = '';
+  const msg = q('playStatus');
+  msg.textContent = '⏳ 初始化...';
+  
+  // Stop previous
+  if (wtTorrent) { wtTorrent.destroy(); wtTorrent = null; }
+  
+  if (!wtClient) {
+    msg.textContent = '⏳ 加载WebTorrent...';
+    wtClient = new WebTorrent();
   }
+  
+  const magnet = parsed.magnet;
+  const fileIndex = i;
+  
+  // Add WebSocket trackers for better peer discovery
+  // Trackers that support WebTorrent/WebRTC
+  // WebTorrent uses these for peer discovery via WebSocket
+  const rtcConfig = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
+  
+  const opts = {
+    announce: [
+      'wss://tracker.btorrent.xyz',
+      'wss://tracker.openwebtorrent.com',
+      'wss://tracker.webtorrent.dev',
+      'wss://tracker.fastcast.nz',
+      'wss://tracker.webtorrent.io',
+    ],
+    path: '/downloads',
+    rtcConfig: rtcConfig,
+  };
+  
+  msg.textContent = '⏳ 搜索做种者...';
+  let timeoutCount = 0;
+  
+  const torrent = wtClient.add(magnet, opts, function(torrent) {
+    wtTorrent = torrent;
+    
+    // Metadata received
+    msg.textContent = '📡 连接中... (' + torrent.numPeers + ' 节点)';
+    
+    torrent.on('warning', function(e) {
+      console.log('WT warning:', e.message);
+    });
+    
+    torrent.on('error', function(e) {
+      msg.textContent = '❌ 错误: ' + e.message;
+    });
+    
+    function checkReady() {
+      const file = torrent.files[fileIndex];
+      if (!file) {
+        if (!torrent.done) { setTimeout(checkReady, 1000); return; }
+        msg.textContent = '❌ 文件索引错误';
+        return;
+      }
+      
+      msg.textContent = '🎬 准备播放 (' + (file.length / 1024 / 1024).toFixed(1) + 'MB) ' + torrent.numPeers + '节点';
+      
+      // Show progress bar
+      let pdiv = q('wtProgress');
+      if (!pdiv) {
+        pdiv = document.createElement('div');
+        pdiv.className = 'stream-progress';
+        pdiv.id = 'wtProgress';
+        document.querySelector('.play-top').after(pdiv);
+      }
+      
+      const interval = setInterval(function() {
+        const p = (torrent.progress * 100).toFixed(1);
+        const dl = (torrent.downloadSpeed / 1024 / 1024).toFixed(1);
+        pdiv.innerHTML = '<div class="stream-progress-fill" style="width:' + p + '%"></div>';
+        msg.textContent = '📡 ' + p + '% (' + dl + ' MB/s) ' + torrent.numPeers + '节点';
+        if (torrent.done) clearInterval(interval);
+      }, 1000);
+      
+      // Stream to video
+      file.renderTo('playVideo', { autoplay: true });
+    }
+    
+    checkReady();
+  });
+  
+  // Status updates while loading metadata
+  const metaInterval = setInterval(function() {
+    if (torrent.torrent) {
+      clearInterval(metaInterval);
+      return;
+    }
+    timeoutCount++;
+    const peers = torrent.numPeers || 0;
+    if (timeoutCount > 30) {
+      clearInterval(metaInterval);
+      msg.textContent = '❌ 找不到做种者(' + peers + '节点)';
+      return;
+    }
+    msg.textContent = '⏳ 搜索中... ' + timeoutCount + 's (' + peers + '节点)';
+  }, 1000);
 }
 
 // ==== About ====
@@ -470,31 +581,25 @@ async function updateAbout() {
   }
 }
 
-// ==== Delete Dialog ====
-function showDel(h, n) {
-  delHash = h;
-  q('delName').textContent = '「' + n + '」';
-  q('delDlg').classList.remove('hidden');
-}
-function closeDel() {
-  q('delDlg').classList.add('hidden');
-  delHash = '';
-}
+// ==== Delete ====
+function showDel(h, n) { delHash = h; q('delName').textContent = '「'+n+'」'; q('delDlg').classList.remove('hidden'); }
+function closeDel() { q('delDlg').classList.add('hidden'); delHash = ''; }
 function confirmDel() {
   const delFiles = document.querySelector('input[name="delOpt"]:checked').value === 'all';
   const h = delHash;
   q('delDlg').classList.add('hidden');
   delHash = '';
-  fetch(BASE + '/api/torrents/' + h + '?delete_files=' + delFiles, {method:'DELETE'})
+  fetch(BASE+'/api/torrents/'+h+'?delete_files='+delFiles, {method:'DELETE'})
     .then(() => loadTorrents()).catch(() => loadTorrents());
-  switchTab(1);
+  switchTab(2);
 }
 
 function esc(s) { const d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
 
-// Init
-setInterval(loadTorrents, 5000);
-loadTorrents();
+// Init - just load header stats once
+api('/api/stats').then(s=>{
+  if(s){q('s-total').textContent=s.total_torrents;q('s-dl').textContent=s.total_download_rate;}
+});
 </script>
 </body>
 </html>
