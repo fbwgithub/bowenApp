@@ -93,6 +93,9 @@ class TorrentViewModel : ViewModel() {
     private val _streamUrl = MutableStateFlow(Pair("", ""))
     val streamUrl: StateFlow<Pair<String, String>> = _streamUrl.asStateFlow()
 
+    private val _isRefreshing = MutableStateFlow(false)
+    val isRefreshing: StateFlow<Boolean> = _isRefreshing.asStateFlow()
+
     private val _stats = MutableStateFlow(StatsResponse())
     val stats: StateFlow<StatsResponse> = _stats.asStateFlow()
 
@@ -104,6 +107,14 @@ class TorrentViewModel : ViewModel() {
                 try { _stats.value = api.getStats() } catch (_: Exception) {}
                 delay(5000)
             }
+        }
+    }
+
+    fun refreshTorrents() {
+        viewModelScope.launch {
+            _isRefreshing.value = true
+            try { _torrents.value = api.listTorrents() } catch (_: Exception) {}
+            _isRefreshing.value = false
         }
     }
 
@@ -163,9 +174,9 @@ class TorrentViewModel : ViewModel() {
         viewModelScope.launch { try { api.resumeTorrent(infoHash) } catch (_: Exception) {} }
     }
 
-    fun removeTorrent(infoHash: String) {
+    fun removeTorrent(infoHash: String, deleteFiles: Boolean = false) {
         viewModelScope.launch {
-            try { api.removeTorrent(infoHash); _currentTorrent.value = null } catch (_: Exception) {}
+            try { api.removeTorrent(infoHash, deleteFiles); _currentTorrent.value = null } catch (_: Exception) {}
         }
     }
 

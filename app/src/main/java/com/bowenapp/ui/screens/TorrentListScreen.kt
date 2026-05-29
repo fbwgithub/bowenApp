@@ -8,6 +8,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -16,12 +17,34 @@ import com.bowenapp.data.model.TorrentInfo
 import com.bowenapp.ui.components.StatusBadge
 import com.bowenapp.ui.components.TorrentProgressBar
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TorrentListScreen(
     torrents: List<TorrentInfo>,
-    onTorrentClick: (String) -> Unit
+    onTorrentClick: (String) -> Unit,
+    onPause: (String) -> Unit = {},
+    onResume: (String) -> Unit = {},
+    onDelete: (String) -> Unit = {},
+    isRefreshing: Boolean = false,
+    onRefresh: () -> Unit = {}
 ) {
-    if (torrents.isEmpty()) {
+    val pullRefreshState = rememberPullToRefreshState()
+
+    // Trigger refresh when pull gesture completes
+    LaunchedEffect(pullRefreshState.isRefreshing) {
+        if (pullRefreshState.isRefreshing) {
+            onRefresh()
+        }
+    }
+
+    // End refresh animation when data loading finishes
+    LaunchedEffect(isRefreshing) {
+        if (!isRefreshing) {
+            pullRefreshState.endRefresh()
+        }
+    }
+
+    if (torrents.isEmpty() && !isRefreshing) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text("📥", fontSize = 40.sp)
@@ -34,21 +57,40 @@ fun TorrentListScreen(
         return
     }
 
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .nestedScroll(pullRefreshState.nestedScrollConnection)
     ) {
-        items(torrents, key = { it.infoHash }) { t ->
-            TorrentCard(torrent = t, onClick = { onTorrentClick(t.infoHash) })
+        LazyColumn(
+            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            items(torrents, key = { it.infoHash }) { t ->
+                TorrentCard(
+                    torrent = t,
+                    onClick = { onTorrentClick(t.infoHash) },
+                    onPause = { onPause(t.infoHash) },
+                    onResume = { onResume(t.infoHash) },
+                    onDelete = { onDelete(t.infoHash) }
+                )
+            }
         }
+
+        PullToRefreshContainer(
+            state = pullRefreshState,
+            modifier = Modifier.align(Alignment.TopCenter)
+        )
     }
 }
 
 @Composable
 private fun TorrentCard(
     torrent: TorrentInfo,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    onPause: () -> Unit,
+    onResume: () -> Unit,
+    onDelete: () -> Unit
 ) {
     Card(
         modifier = Modifier
@@ -58,6 +100,7 @@ private fun TorrentCard(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
     ) {
         Column(modifier = Modifier.padding(14.dp)) {
+            // Title + status badge
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -74,9 +117,12 @@ private fun TorrentCard(
                 Spacer(Modifier.width(8.dp))
                 StatusBadge(torrent.state)
             }
+
             Spacer(Modifier.height(8.dp))
             TorrentProgressBar(progress = torrent.progress.toFloat())
             Spacer(Modifier.height(6.dp))
+
+            // Info chips
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween
@@ -84,6 +130,44 @@ private fun TorrentCard(
                 InfoChip("进度", "${(torrent.progress * 100).toInt()}%")
                 InfoChip("大小", torrent.totalSizeStr)
                 InfoChip("速度", torrent.downloadRateStr)
+            }
+
+            Spacer(Modifier.height(8.dp))
+
+            // Action buttons
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                if (torrent.state == "paused") {
+                    FilledTonalButton(
+                        onClick = onResume,
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                        modifier = Modifier.height(32.dp)
+                    ) {
+                        Text("▶ 继续", fontSize = 11.sp)
+                    }
+                } else if (torrent.state != "finished" && torrent.state != "seeding") {
+                    OutlinedButton(
+                        onClick = onPause,
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                        modifier = Modifier.height(32.dp)
+                    ) {
+                        Text("⏸ 暂停", fontSize = 11.sp)
+                    }
+                }
+                Spacer(Modifier.width(6.dp))
+                Button(
+                    onClick = onDelete,
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                    modifier = Modifier.height(32.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.error
+                    )
+                ) {
+                    Text("🗑 删除", fontSize = 11.sp, color = MaterialTheme.colorScheme.onError)
+                }
             }
         }
     }
