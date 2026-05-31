@@ -14,9 +14,3 @@ torrent_cache
 .server_pid
 torrents_state.json
 downloads/
-
-# WSL cross-platform
-torrent_server
-backend/torrent_server
-downloads/
-torrent_cache/
