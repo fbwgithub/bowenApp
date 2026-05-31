@@ -4,14 +4,13 @@ const path = require('path');
 const { spawn } = require('child_process');
 const crypto = require('crypto');
 
-const PORT = 5000;
-const TORRENT_PORT = 5001;
+const PORT = 18000;
+const TORRENT_PORT = 18001;
 const BASE = __dirname;
 const HTML_PATH = path.join(BASE, 'templates', 'index.html');
-const PARSE_WORKER = path.join(BASE, 'simple_parse.py');
-const SESSION = path.join(BASE, 'torrent_session.py');
+const PARSE_WORKER = path.join(BASE, 'torrent_server');
+const SESSION = path.join(BASE, 'torrent_server');
 const DOWNLOAD_DIR = path.join(BASE, 'downloads');
-const PYTHON = 'python3';
 
 if (!fs.existsSync(DOWNLOAD_DIR)) fs.mkdirSync(DOWNLOAD_DIR, { recursive: true });
 
@@ -75,7 +74,7 @@ async function tsGetOne(ih) {
 
 // Start Python torrent session
 function startSession() {
-  const proc = spawn(PYTHON, [SESSION], {
+  const proc = spawn(SESSION, [], {
     stdio: ['ignore', 'pipe', 'pipe'],
     cwd: BASE,
   });
@@ -100,7 +99,7 @@ startSession();
 const parseTasks = new Map();
 
 function startParse(taskId, magnet) {
-  const proc = spawn(PYTHON, [PARSE_WORKER, magnet, DOWNLOAD_DIR], {
+  const proc = spawn(PARSE_WORKER, ['--parse', magnet, DOWNLOAD_DIR], {
     timeout: 60000,
     stdio: ['ignore', 'pipe', 'pipe']
   });
@@ -254,46 +253,38 @@ const server = http.createServer(async (req, res) => {
       return jsonResp(res, { success: true, name: r.name, total_size_str: fmt(r.total_size_str ? r.total_size_str : r.total_size), info_hash: r.info_hash, files: (r.files || []).map(f => ({...f, size_str: fmt(f.size)})) });
     }
 
-    // POST /api/magnet/parse (synchronous)
+    // POST /api/magnet/parse (via running C++ session)
     if (req.method === 'POST' && pathname === '/api/magnet/parse') {
       const body = await getBody(req);
       const magnet = (body.magnet || '').trim();
       if (!magnet.startsWith('magnet:')) return jsonResp(res, { success: false, error: '无效磁力链接' }, 400);
       
-      // Run parse and wait for result synchronously
       try {
-        const parseResult = await new Promise((resolve, reject) => {
-          const taskId = crypto.randomBytes(6).toString('hex');
-          parseTasks.set(taskId, { ts: Date.now(), status: 'parsing' });
-          startParse(taskId, magnet);
-          
-          const check = () => {
-            const t = parseTasks.get(taskId);
-            if (!t) { reject(new Error('task lost')); return; }
-            if (t.status === 'done') {
-              parseTasks.delete(taskId);
-              resolve(t.result);
-              return;
-            }
-            if (t.status === 'error') {
-              parseTasks.delete(taskId);
-              reject(new Error(t.error));
-              return;
-            }
-            setTimeout(check, 500);
-          };
-          setTimeout(check, 500);
+        // Use the running C++ session's /parse endpoint
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 35000);
+        const r = await fetch(`http://127.0.0.1:${TORRENT_PORT}/parse`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ magnet }),
+          signal: controller.signal,
         });
+        clearTimeout(timeout);
+        const data = await r.json();
+        
+        if (data.error) {
+          return jsonResp(res, { success: false, error: data.error }, 408);
+        }
         
         return jsonResp(res, {
           success: true,
-          name: parseResult.name,
-          total_size_str: fmt(parseResult.total_size_str || parseResult.total_size || 0),
-          info_hash: parseResult.info_hash,
-          files: (parseResult.files || []).map(f => ({...f, size_str: fmt(f.size)}))
+          name: data.name,
+          total_size_str: data.total_size_str || fmt(data.total_size || 0),
+          info_hash: data.info_hash,
+          files: (data.files || []).map(f => ({...f, size_str: fmt(f.size)}))
         });
       } catch(e) {
-        return jsonResp(res, { success: false, error: e.message }, 408);
+        return jsonResp(res, { success: false, error: '解析超时: ' + e.message }, 408);
       }
     }
 
